@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Context;
-use clap::{Args, Parser, Subcommand};
-use deident_host::{Engine, NativeEngine};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use deident_host::{Engine, NativeEngine, WasmEngine, WasmLimits};
 use deident_types::{JobOutcome, JobRequest, Mode, RiskReport};
 
 #[derive(Parser)]
@@ -51,6 +51,32 @@ struct JobArgs {
     /// Optional JSON risk report file.
     #[arg(long)]
     report: Option<PathBuf>,
+
+    /// Execution engine: `wasm` runs the job in a per-job WebAssembly
+    /// sandbox (fresh store, job directory as the only filesystem
+    /// capability, no network); `native` runs in-process.
+    #[arg(long, value_enum, default_value_t = EngineKind::Native)]
+    engine: EngineKind,
+
+    /// Path to the compiled worker module (wasm engine only). Defaults to
+    /// `$DEIDENT_WORKER_WASM`, then `deident-worker.wasm` next to this
+    /// binary, then the local cargo build under target/wasm32-wasip1/.
+    #[arg(long)]
+    worker: Option<PathBuf>,
+
+    /// Guest memory limit in MiB (wasm engine only).
+    #[arg(long, default_value_t = 256)]
+    max_memory_mib: usize,
+
+    /// Job timeout in seconds (wasm engine only).
+    #[arg(long, default_value_t = 30)]
+    timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum EngineKind {
+    Native,
+    Wasm,
 }
 
 fn main() -> ExitCode {
@@ -90,9 +116,8 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
         report_path: args.report.as_deref().map(path_to_string).transpose()?,
     };
 
-    // MVP: in-process execution. Phase 3 adds `--engine wasm` running the
-    // same request in a per-job Wasmtime sandbox.
-    let response = NativeEngine.run(&request)?;
+    let engine = build_engine(args)?;
+    let response = engine.run(&request)?;
 
     match response.outcome {
         JobOutcome::Succeeded { report } => {
@@ -104,6 +129,60 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::FAILURE)
         }
     }
+}
+
+fn build_engine(args: &JobArgs) -> anyhow::Result<Box<dyn Engine>> {
+    match args.engine {
+        EngineKind::Native => Ok(Box::new(NativeEngine)),
+        EngineKind::Wasm => {
+            let worker = resolve_worker_module(args.worker.as_deref())?;
+            let limits = WasmLimits {
+                max_memory_bytes: args.max_memory_mib * 1024 * 1024,
+                timeout: std::time::Duration::from_secs(args.timeout_secs),
+                ..WasmLimits::default()
+            };
+            Ok(Box::new(WasmEngine::from_file(&worker, limits)?))
+        }
+    }
+}
+
+/// Locate the compiled worker module: explicit flag, then env var, then next
+/// to the executable, then the local cargo build (dev convenience).
+fn resolve_worker_module(flag: Option<&Path>) -> anyhow::Result<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(path) = flag {
+        candidates.push(path.to_path_buf());
+    }
+    if let Ok(path) = std::env::var("DEIDENT_WORKER_WASM") {
+        candidates.push(PathBuf::from(path));
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        candidates.push(dir.join("deident-worker.wasm"));
+    }
+    for profile in ["release", "debug"] {
+        candidates.push(
+            PathBuf::from("target/wasm32-wasip1")
+                .join(profile)
+                .join("deident-worker.wasm"),
+        );
+    }
+    for candidate in &candidates {
+        if candidate.is_file() {
+            return Ok(candidate.clone());
+        }
+    }
+    anyhow::bail!(
+        "cannot find the worker module (looked at: {}); build it with \
+         `cargo build -p deident-worker --target wasm32-wasip1 --release` \
+         or point --worker / $DEIDENT_WORKER_WASM at it",
+        candidates
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {

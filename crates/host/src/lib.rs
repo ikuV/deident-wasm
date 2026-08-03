@@ -8,6 +8,8 @@ use deident_types::{JobRequest, JobResponse};
 
 pub mod wasm;
 
+pub use wasm::{WasmEngine, WasmLimits};
+
 /// Runs one job to completion. Implementations must be safe to reuse across
 /// jobs but must not share per-job state.
 pub trait Engine {

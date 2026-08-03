@@ -30,8 +30,10 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
 
 ## Status
 
-MVP. CSV in/out, native execution. Per-job WebAssembly sandbox execution
-(Wasmtime + WASI, fresh store per job, deny-by-default capabilities, no network),
+MVP. CSV in/out. Two execution engines: `native` (in-process, default) and
+`wasm` — each job runs in its own WebAssembly sandbox (Wasmtime + WASI, fresh
+store per job, the job directory as the only filesystem capability, no network,
+memory/time limits). See [Sandboxed execution](#sandboxed-execution).
 JSONL/Parquet support and an encrypted mapping vault are on the roadmap — see
 [Roadmap](#roadmap).
 
@@ -91,6 +93,10 @@ Options (identical for both commands):
 | `--policy <FILE>` | yes | Policy YAML describing field classes and strategies |
 | `--out <FILE>` | yes | Output CSV file |
 | `--report <FILE>` | no | Write the JSON risk report to this path |
+| `--engine <ENGINE>` | no | `native` (in-process, default) or `wasm` (per-job sandbox) |
+| `--worker <FILE>` | no | Compiled worker module for `--engine wasm` (see discovery order below) |
+| `--max-memory-mib <N>` | no | Guest memory limit in MiB (wasm only, default 256) |
+| `--timeout-secs <N>` | no | Job wall-clock timeout in seconds (wasm only, default 30) |
 | `-h, --help` | | Print help |
 | `-v, -V, --version` | | Print version |
 
@@ -99,10 +105,46 @@ Environment:
 | Variable | Purpose |
 |---|---|
 | `DEIDENT_KEY` (or whatever the policy's `key.env` names) | Secret for pseudonymization key derivation |
+| `DEIDENT_WORKER_WASM` | Path to the worker module for `--engine wasm` |
 | `RUST_LOG` | Log verbosity on stderr, e.g. `RUST_LOG=debug` (default `info`) |
 
 Exit codes: `0` success, non-zero on any failure (bad policy, unreadable input,
 unlisted column, missing key, ...). Human summary goes to stdout, logs to stderr.
+
+## Sandboxed execution
+
+`--engine wasm` runs each job inside its own WebAssembly sandbox instead of
+in-process. The exact same transformation code runs either way (the core crate
+compiles into both), and outputs are byte-identical — the sandbox adds an
+isolation layer around the parsing/transformation logic:
+
+- **Fresh instance per job** — a new Wasmtime store and WASI context every
+  time; no state survives from one job to the next.
+- **One directory, nothing else** — the guest sees a single preopened job
+  workspace containing a *copy* of the input; your real filesystem paths never
+  reach it. Attempts to read outside (absolute paths, `..` escapes) fail.
+- **No network** — the WASI context simply has no socket capability.
+- **Minimal environment** — only the one key variable a pseudonymize policy
+  names is passed through, and only if set.
+- **Resource limits** — guest memory (`--max-memory-mib`) and wall-clock
+  timeout (`--timeout-secs`) are enforced per job.
+
+Sandboxing *reduces* the blast radius of malformed inputs and future untrusted
+plugins; it is a mitigation, not an absolute security boundary.
+
+Build the worker module once, then use it:
+
+```bash
+rustup target add wasm32-wasip1
+cargo build -p deident-worker --target wasm32-wasip1 --release
+
+deident anonymize input.csv --policy p.yaml --out out.csv --engine wasm
+```
+
+The worker module is found in this order: `--worker <FILE>`, then
+`$DEIDENT_WORKER_WASM`, then `deident-worker.wasm` next to the `deident`
+binary, then the local cargo build under `target/wasm32-wasip1/`. For
+deployment, copy `deident-worker.wasm` next to the installed binary.
 
 ## Policy reference
 
@@ -273,11 +315,12 @@ The `limitations` block is embedded in every report by design.
   GDPR). Reversal requires only the key material — protect it separately.
 - Deny-by-default policy handling: unlisted columns and unknown policy keys fail
   the job unless explicitly relaxed.
-- Planned (not yet active): each job runs in a fresh WebAssembly sandbox with a
+- With `--engine wasm`, each job runs in a fresh WebAssembly sandbox with a
   preopened job directory as its only filesystem capability, no network, and
-  per-job CPU/memory/time limits. Sandboxing *reduces* the blast radius of risky
-  parsing logic and future untrusted plugins; it is a mitigation, not an absolute
-  boundary, and no escape-proof claims are made.
+  per-job memory/time limits (see [Sandboxed execution](#sandboxed-execution)).
+  Sandboxing *reduces* the blast radius of risky parsing logic and future
+  untrusted plugins; it is a mitigation, not an absolute boundary, and no
+  escape-proof claims are made.
 - Non-goals: differential privacy, synthetic data generation, free-text/NLP
   de-identification, and legal certification of any output.
 
@@ -287,7 +330,7 @@ The `limitations` block is embedded in every report by design.
 |---|---|
 | `crates/cli` | `deident` binary — command-line UX |
 | `crates/core` | Policy schema, transforms, job engine, risk reports |
-| `crates/host` | Execution engines: native today, Wasmtime sandbox next |
+| `crates/host` | Execution engines: in-process native and per-job Wasmtime sandbox |
 | `crates/worker` | Wasm guest that executes one job inside its sandbox |
 | `crates/types` | Shared request/response/report models |
 
@@ -298,8 +341,8 @@ cargo clippy --workspace --all-targets
 
 ## Roadmap
 
-- **Wasm sandbox execution** — per-job Wasmtime store + WASI context, single
-  preopened job directory, no network, memory/CPU/time limits, `--engine wasm`.
+- **Sandbox by default** — make `--engine wasm` the default once the worker
+  module ships alongside released binaries; tune fuel-based CPU budgets.
 - **Encrypted mapping vault** — persist original→token mappings under AEAD for
   authorized reversal workflows.
 - **More formats** — JSONL, then Parquet.

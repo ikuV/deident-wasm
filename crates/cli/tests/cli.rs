@@ -86,6 +86,45 @@ fn anonymize_example_writes_report() {
 }
 
 #[test]
+fn anonymize_through_wasm_sandbox_matches_native() {
+    // Build the worker module (cached by cargo after the first run).
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let status = std::process::Command::new("cargo")
+        .args(["build", "-p", "deident-worker", "--target", "wasm32-wasip1", "--release"])
+        .current_dir(&root)
+        .status()
+        .unwrap();
+    assert!(status.success(), "worker wasm build failed");
+    let worker = root.join("target/wasm32-wasip1/release/deident-worker.wasm");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let native_out = tmp.path().join("native.csv");
+    let wasm_out = tmp.path().join("wasm.csv");
+
+    for (engine_args, out) in [
+        (vec![], &native_out),
+        (vec!["--engine", "wasm", "--worker", worker.to_str().unwrap()], &wasm_out),
+    ] {
+        deident()
+            .arg("anonymize")
+            .arg(example("data/patients.csv"))
+            .arg("--policy")
+            .arg(example("policies/patients.yaml"))
+            .arg("--out")
+            .arg(out)
+            .args(engine_args)
+            .assert()
+            .success();
+    }
+
+    assert_eq!(
+        std::fs::read(&native_out).unwrap(),
+        std::fs::read(&wasm_out).unwrap(),
+        "wasm and native engines must produce identical output"
+    );
+}
+
+#[test]
 fn missing_input_fails_with_nonzero_exit() {
     let tmp = tempfile::tempdir().unwrap();
     deident()
