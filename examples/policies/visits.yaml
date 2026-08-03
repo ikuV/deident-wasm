@@ -1,0 +1,39 @@
+# Example policy for examples/data/visits.csv — the second file of the
+# chained hospital export (see examples/chains/hospital.yaml).
+version: 1
+
+# Same dataset scope as patients.yaml, so tokens link across the two files.
+dataset: patients-demo
+
+key:
+  env: DEIDENT_KEY
+  inline: "demo-secret-do-not-use-in-production"
+
+on_unlisted: error
+
+fields:
+  - name: visit_id
+    class: direct_identifier
+    pseudonymize:
+      prefix: "vis_"
+
+  - name: patient_ref
+    class: direct_identifier
+    pseudonymize:
+      prefix: "pid_"
+      # Same identity domain as the `patient_id` column in patients.csv:
+      # P001 tokenizes to the identical pseudonym in both files, so the
+      # foreign key keeps working after pseudonymization.
+      domain: patient_id
+
+  - name: visit_date
+    class: quasi_identifier
+    anonymize:
+      strategy: date_truncate
+      granularity: year
+
+  - name: ward
+    class: sensitive
+
+  - name: cost_eur
+    class: utility

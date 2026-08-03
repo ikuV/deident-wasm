@@ -1,0 +1,13 @@
+age,zip,admission_date,diagnosis,notes
+30-39,815**,2024,J45.909,follow-up in 6 weeks
+30-39,815**,2024,E11.9,newly diagnosed
+50-59,803**,2023,I10,medication adjusted
+50-59,803**,2023,I10,stable
+20-29,853**,2024,J06.9,resolved
+30-39,815**,2024,M54.5,physio referral
+30-39,815**,2024,K21.0,dietary advice
+40-49,803**,2023,F32.1,therapy ongoing
+40-49,803**,2023,E78.5,statin started
+60-69,853**,2022,I25.10,cardiology referral
+20-29,853**,2024,J45.909,inhaler renewed
+30-39,815**,2024,E11.9,HbA1c improved

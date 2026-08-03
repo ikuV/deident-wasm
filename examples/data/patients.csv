@@ -1,6 +1,6 @@
 patient_id,full_name,email,age,zip,admission_date,diagnosis,notes
 P001,Alice Muster,alice.muster@example.com,34,81549,2024-03-14,J45.909,follow-up in 6 weeks
-P002,Bruno Beispiel,bruno@example.org,37,81541,2024-07-02,E11.9,newly diagnosed
+P002,Bruno Beispiel,bruno@example.org,37,81541,2024-07-02,E11.9,newly diagnosed; refund to DE89370400440532013000
 P003,Carla Demo,carla.demo@example.com,52,80331,2023-11-20,I10,medication adjusted
 P004,Deniz Test,deniz@example.net,58,80333,2023-05-08,I10,stable
 P005,Erik Probe,erik.probe@example.com,29,85354,2024-01-19,J06.9,resolved

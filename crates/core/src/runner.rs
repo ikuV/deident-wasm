@@ -17,7 +17,9 @@ use crate::vault::NoopVault;
 /// caller can report them uniformly.
 pub fn execute(request: &JobRequest) -> JobResponse {
     let outcome = match run(request) {
-        Ok(report) => JobOutcome::Succeeded { report },
+        Ok(report) => JobOutcome::Succeeded {
+            report: Box::new(report),
+        },
         Err(err) => JobOutcome::Failed {
             error: err.to_string(),
         },

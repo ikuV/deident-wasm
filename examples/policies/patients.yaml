@@ -54,3 +54,12 @@ fields:
 
   - name: notes
     class: utility
+
+# Content-pattern rules scan cell values (here: free text) in BOTH modes and
+# detect, redact or tokenize matches — direct identifiers hiding inside text
+# that column-level rules can't reach.
+patterns:
+  - name: iban
+    builtin: iban        # or a custom `regex:` — exactly one of the two
+    fields: [notes]      # omit to scan every column in the output
+    action: redact       # detect | redact | token

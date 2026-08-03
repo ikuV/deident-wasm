@@ -22,6 +22,10 @@ pub struct Policy {
     #[serde(default)]
     pub on_unlisted: UnlistedAction,
     pub fields: Vec<FieldPolicy>,
+    /// Content-pattern rules applied to cell values (e.g. IBANs embedded in
+    /// free text). Run in both modes, after the column-level transform.
+    #[serde(default)]
+    pub patterns: Vec<PatternRule>,
 }
 
 /// Source of the pseudonymization secret.
@@ -87,6 +91,12 @@ pub struct PseudonymizeCfg {
     /// Prefix prepended to the token, e.g. `pid_`.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// Identity domain the token is derived in; defaults to the column name.
+    /// Give columns in *different* files (e.g. `patient_id` and
+    /// `patient_ref`) the same domain so the same value yields the same
+    /// token across a chained run and joins keep working.
+    #[serde(default)]
+    pub domain: Option<String>,
 }
 
 /// Anonymization strategy for a field, tagged by `strategy` in YAML.
@@ -133,6 +143,94 @@ pub enum DateGranularity {
     YearMonth,
 }
 
+/// A content-pattern rule: find matches of a regex (or a built-in pattern)
+/// inside cell values and detect, redact or tokenize them.
+///
+/// Pattern rules run in **both modes** — an IBAN in a free-text column needs
+/// handling regardless of whether the job pseudonymizes or anonymizes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatternRule {
+    /// Rule name; also the token domain (`pattern:<name>`) and the default
+    /// redaction label (`[<NAME>]`).
+    pub name: String,
+    /// Custom regular expression. Exactly one of `regex`/`builtin` must be set.
+    #[serde(default)]
+    pub regex: Option<String>,
+    /// Built-in heuristic pattern. Exactly one of `regex`/`builtin` must be set.
+    #[serde(default)]
+    pub builtin: Option<BuiltinPattern>,
+    /// Columns to scan; omitted = every column that appears in the output.
+    #[serde(default)]
+    pub fields: Option<Vec<String>>,
+    pub action: PatternAction,
+    /// Replacement text for `action: redact` (default `[<NAME>]`).
+    #[serde(default)]
+    pub replacement: Option<String>,
+    /// Token prefix for `action: token`.
+    #[serde(default)]
+    pub prefix: Option<String>,
+}
+
+impl PatternRule {
+    /// The effective regex source for this rule.
+    pub fn regex_source(&self) -> &str {
+        match (&self.regex, &self.builtin) {
+            (Some(re), _) => re,
+            (None, Some(builtin)) => builtin.regex_source(),
+            (None, None) => unreachable!("validated: one of regex/builtin is set"),
+        }
+    }
+}
+
+/// What to do with pattern matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatternAction {
+    /// Only count matches for the risk report; values stay in the output.
+    Detect,
+    /// Replace each match with a fixed label.
+    Redact,
+    /// Replace each match with a deterministic keyed token (requires a key
+    /// source; the affected output is pseudonymous, i.e. reversible with the
+    /// key material).
+    Token,
+}
+
+impl PatternAction {
+    /// Past-tense label used in reports.
+    pub fn action_name(&self) -> &'static str {
+        match self {
+            PatternAction::Detect => "detected",
+            PatternAction::Redact => "redacted",
+            PatternAction::Token => "tokenized",
+        }
+    }
+}
+
+/// Built-in content patterns. These are pragmatic heuristics, not validators —
+/// expect some false positives/negatives and tune with a custom `regex` where
+/// needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltinPattern {
+    Iban,
+    Email,
+    Phone,
+    CreditCard,
+}
+
+impl BuiltinPattern {
+    pub fn regex_source(&self) -> &'static str {
+        match self {
+            BuiltinPattern::Iban => r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\b",
+            BuiltinPattern::Email => r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+            BuiltinPattern::Phone => r"\+?[0-9][0-9 ()/\-]{6,}[0-9]",
+            BuiltinPattern::CreditCard => r"\b(?:[0-9]{4}[ -]?){3}[0-9]{1,4}\b",
+        }
+    }
+}
+
 fn default_replacement() -> String {
     "REDACTED".to_string()
 }
@@ -174,6 +272,42 @@ impl Policy {
                 return Err(CoreError::Policy(format!(
                     "field '{}': bucket width must be positive",
                     field.name
+                )));
+            }
+        }
+        let mut pattern_names = std::collections::HashSet::new();
+        for pattern in &self.patterns {
+            if !pattern_names.insert(pattern.name.as_str()) {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}' is listed more than once",
+                    pattern.name
+                )));
+            }
+            match (&pattern.regex, &pattern.builtin) {
+                (Some(_), Some(_)) | (None, None) => {
+                    return Err(CoreError::Policy(format!(
+                        "pattern '{}': exactly one of 'regex' or 'builtin' must be set",
+                        pattern.name
+                    )));
+                }
+                _ => {}
+            }
+            if let Err(err) = regex::Regex::new(pattern.regex_source()) {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}': invalid regex: {err}",
+                    pattern.name
+                )));
+            }
+            if pattern.replacement.is_some() && pattern.action != PatternAction::Redact {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}': 'replacement' is only valid with action: redact",
+                    pattern.name
+                )));
+            }
+            if pattern.prefix.is_some() && pattern.action != PatternAction::Token {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}': 'prefix' is only valid with action: token",
+                    pattern.name
                 )));
             }
         }

@@ -49,7 +49,7 @@ pub struct JobResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum JobOutcome {
-    Succeeded { report: RiskReport },
+    Succeeded { report: Box<RiskReport> },
     Failed { error: String },
 }
 
@@ -69,6 +69,10 @@ pub struct RiskReport {
     /// Equivalence-class statistics over the (transformed) quasi-identifier
     /// columns, when any are present.
     pub quasi_identifiers: Option<QuasiIdentifierSummary>,
+    /// Content-pattern matches (e.g. IBANs in free text) and what was done
+    /// with them.
+    #[serde(default)]
+    pub patterns: Vec<PatternFinding>,
     /// Non-fatal issues encountered while running the job.
     pub warnings: Vec<String>,
     /// Fixed limitations language embedded in every report.
@@ -107,4 +111,41 @@ pub struct KThreshold {
     pub k: u64,
     pub rows_at_or_above: u64,
     pub ratio: f64,
+}
+
+/// Matches of one content pattern in one column.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternFinding {
+    /// Pattern rule name from the policy (e.g. `iban`).
+    pub pattern: String,
+    /// Column the matches were found in.
+    pub field: String,
+    /// Total number of matches across all rows.
+    pub matches: u64,
+    /// What happened to them: "detected", "redacted" or "tokenized".
+    pub action: String,
+}
+
+/// Result of a chained multi-dataset run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainReport {
+    /// Chain name from the manifest.
+    pub name: String,
+    pub mode: Mode,
+    /// True when every job ran and succeeded. On the first failure the
+    /// remaining jobs are not executed.
+    pub completed: bool,
+    pub jobs: Vec<ChainJobResult>,
+    /// Chain-level warnings (e.g. policies with diverging dataset scopes
+    /// that would break cross-file token linkage).
+    pub warnings: Vec<String>,
+}
+
+/// Outcome of one job within a chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainJobResult {
+    pub name: String,
+    pub input: String,
+    pub output: String,
+    pub outcome: JobOutcome,
 }

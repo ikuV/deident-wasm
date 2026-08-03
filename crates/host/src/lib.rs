@@ -6,8 +6,10 @@
 
 use deident_types::{JobRequest, JobResponse};
 
+pub mod chain;
 pub mod wasm;
 
+pub use chain::{ChainManifest, run_chain};
 pub use wasm::{WasmEngine, WasmLimits};
 
 /// Runs one job to completion. Implementations must be safe to reuse across

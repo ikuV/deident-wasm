@@ -83,9 +83,10 @@ deident <COMMAND> [OPTIONS]
 |---|---|
 | `pseudonymize <INPUT> --policy <FILE> --out <FILE> [--report <FILE>]` | Reversibly tokenize direct identifiers (deterministic per dataset/policy) |
 | `anonymize <INPUT> --policy <FILE> --out <FILE> [--report <FILE>]` | Irreversibly remove/generalize identifiers and produce a risk report |
+| `chain <MANIFEST> --mode <pseudonymize\|anonymize> [--report <FILE>]` | Run several datasets as one chained export (see [Chained datasets](#chained-datasets)) |
 | `help [COMMAND]` | Print help |
 
-Options (identical for both commands):
+Options for `pseudonymize` / `anonymize` (the engine options also apply to `chain`):
 
 | Option | Required | Description |
 |---|---|---|
@@ -198,6 +199,12 @@ fields:
 
   - name: notes
     class: utility
+
+patterns:                           # content-pattern rules, see below
+  - name: iban
+    builtin: iban
+    fields: [notes]
+    action: redact
 ```
 
 Unknown YAML keys anywhere in the policy are rejected (typos fail fast).
@@ -235,6 +242,35 @@ only to `direct_identifier` fields (which are tokenized with or without this blo
 | Key | Description |
 |---|---|
 | `prefix` | Cosmetic prefix prepended to the token, e.g. `pid_` → `pid_21134bb99aee85cb...` |
+| `domain` | Identity domain the token is derived in; defaults to the column name. Give differently named columns in different files (e.g. `patient_id` and `patient_ref`) the same domain so the same value yields the same token — foreign keys survive (see [Chained datasets](#chained-datasets)) |
+
+### Content-pattern rules
+
+Column-level rules can't reach identifiers hiding *inside* values — an IBAN in a
+free-text `notes` column, an email in a comment. `patterns:` rules scan cell
+content and run in **both modes**, after the column-level transform:
+
+```yaml
+patterns:
+  - name: iban            # rule name; also the default redaction label
+    builtin: iban         # or a custom regex — exactly one of the two:
+    # regex: '\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\b'
+    fields: [notes]       # columns to scan; omit = every column in the output
+    action: redact        # detect | redact | token
+    # replacement: "[IBAN]"   # redact only; default "[<NAME>]"
+    # prefix: "ib_"           # token only
+```
+
+| `action` | Effect |
+|---|---|
+| `detect` | Only count matches for the risk report; values stay in the output (**a warning is recorded**) |
+| `redact` | Replace each match with a fixed label (default `[IBAN]`-style) |
+| `token` | Replace each match with a deterministic keyed token — same IBAN, same token, so joins/grouping survive. Requires a key source; in anonymize mode the report flags the affected output as pseudonymous (reversible with the key) |
+
+Built-in patterns (`builtin:`): `iban`, `email`, `phone`, `credit_card`. These
+are pragmatic heuristics, not validators — expect some false positives/negatives
+and switch to a custom `regex` where precision matters. Dropped and tokenized
+columns are never scanned (nothing left to find).
 
 ## Key management
 
@@ -258,6 +294,59 @@ deident pseudonymize ...
 
 `key.inline` embeds the secret in the policy file — useful for demos and tests,
 unsafe for production. Every run using it records a warning in the report.
+
+## Chained datasets
+
+Real exports are rarely one file: `patients.csv` plus `visits.csv` that
+references it. A chain manifest runs them as one unit so **foreign keys survive
+pseudonymization**:
+
+```yaml
+# hospital.yaml — paths are resolved relative to this file
+version: 1
+name: hospital-demo
+# Optional overrides forced onto every job policy:
+# dataset: hospital-export    # one token scope for all files
+# key: { env: DEIDENT_KEY }   # one key source for all files
+jobs:
+  - name: patients
+    input: ../data/patients.csv
+    policy: ../policies/patients.yaml
+    output: out/patients.csv
+    report: out/patients-report.json   # optional per-job report
+  - name: visits
+    input: ../data/visits.csv
+    policy: ../policies/visits.yaml
+    output: out/visits.csv
+```
+
+```bash
+deident chain hospital.yaml --mode pseudonymize --report out/chain-report.json
+```
+
+Cross-file linkage needs two things:
+
+1. **Same token scope** — all policies share the same `dataset` (and secret),
+   or the manifest forces one via its `dataset:`/`key:` overrides. Diverging
+   scopes in pseudonymize mode are flagged as a chain warning, because they
+   silently break joins.
+2. **Same identity domain** — tokens are namespaced by column name by default,
+   so `patient_id` (patients.csv) and `patient_ref` (visits.csv) would *not*
+   match. Declare the shared domain on the referencing column:
+
+   ```yaml
+   - name: patient_ref
+     class: direct_identifier
+     pseudonymize:
+       prefix: "pid_"
+       domain: patient_id    # ← same namespace as patients.csv's patient_id
+   ```
+
+Jobs run sequentially and the chain stops at the first failure (remaining jobs
+are not run; the combined report says so). Exit code is non-zero unless every
+job succeeded. `--engine wasm` gives each job of the chain its own fresh
+sandbox. A complete working example ships in
+[examples/chains/hospital.yaml](examples/chains/hospital.yaml).
 
 ## Risk report
 
@@ -288,10 +377,18 @@ unsafe for production. Every run using it records a warning in the report.
       { "k": 10, "rows_at_or_above": 0, "ratio": 0.0 }
     ]
   },
+  "patterns": [
+    { "pattern": "iban", "field": "notes", "matches": 1, "action": "redacted" }
+  ],
   "warnings": [],
   "limitations": [ "This report supports a risk assessment; it does not certify or guarantee anonymization.", "..." ]
 }
 ```
+
+`patterns` lists content-pattern matches per rule and column with the action
+taken (`detected` / `redacted` / `tokenized`). `deident chain --report` writes a
+combined chain report instead: chain name, completion flag, chain-level warnings
+and each job's outcome with its embedded `RiskReport`.
 
 How to read the `quasi_identifiers` block: rows are grouped by their combination of
 (transformed) quasi-identifier values — each distinct combination is an
@@ -346,5 +443,7 @@ cargo clippy --workspace --all-targets
 - **Encrypted mapping vault** — persist original→token mappings under AEAD for
   authorized reversal workflows.
 - **More formats** — JSONL, then Parquet.
+- **Format-preserving mocks** — pattern action generating valid-looking fake
+  values (e.g. mock IBANs with correct check digits) for test-data use cases.
 - **Audit logs** — structured per-job JSONL (job id, policy hash, counts, limits).
 - **Policy lints** — warn on risky policies before running.

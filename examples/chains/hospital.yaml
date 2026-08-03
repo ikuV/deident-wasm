@@ -1,0 +1,26 @@
+# Chained export: two files that belong together. Run with e.g.
+#
+#   deident chain examples/chains/hospital.yaml --mode pseudonymize \
+#     --report out/chain-report.json
+#
+# Relative paths are resolved against this file's directory.
+version: 1
+name: hospital-demo
+
+# Optional overrides applied to every job policy:
+#   dataset: hospital-export    # force one token scope for all files
+#   key: { env: DEIDENT_KEY }   # force one key source for all files
+# (Not needed here — both policies already share dataset 'patients-demo'.)
+
+jobs:
+  - name: patients
+    input: ../data/patients.csv
+    policy: ../policies/patients.yaml
+    output: out/patients.csv
+    report: out/patients-report.json
+
+  - name: visits
+    input: ../data/visits.csv
+    policy: ../policies/visits.yaml
+    output: out/visits.csv
+    report: out/visits-report.json

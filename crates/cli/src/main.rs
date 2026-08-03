@@ -36,6 +36,9 @@ enum Command {
     Pseudonymize(JobArgs),
     /// Irreversibly remove/generalize identifiers and produce a risk report.
     Anonymize(JobArgs),
+    /// Run several datasets of one logical export as a chain, with shared
+    /// token scoping and a combined report.
+    Chain(ChainArgs),
 }
 
 #[derive(Args)]
@@ -52,7 +55,45 @@ struct JobArgs {
     #[arg(long)]
     report: Option<PathBuf>,
 
-    /// Execution engine: `wasm` runs the job in a per-job WebAssembly
+    #[command(flatten)]
+    engine: EngineArgs,
+}
+
+#[derive(Args)]
+struct ChainArgs {
+    /// Chain manifest YAML listing the jobs (inputs, policies, outputs).
+    manifest: PathBuf,
+
+    /// Transformation mode applied to every job in the chain.
+    #[arg(long, value_enum)]
+    mode: CliMode,
+
+    /// Optional combined JSON chain report file.
+    #[arg(long)]
+    report: Option<PathBuf>,
+
+    #[command(flatten)]
+    engine: EngineArgs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum CliMode {
+    Pseudonymize,
+    Anonymize,
+}
+
+impl From<CliMode> for Mode {
+    fn from(mode: CliMode) -> Self {
+        match mode {
+            CliMode::Pseudonymize => Mode::Pseudonymize,
+            CliMode::Anonymize => Mode::Anonymize,
+        }
+    }
+}
+
+#[derive(Args)]
+struct EngineArgs {
+    /// Execution engine: `wasm` runs each job in a per-job WebAssembly
     /// sandbox (fresh store, job directory as the only filesystem
     /// capability, no network); `native` runs in-process.
     #[arg(long, value_enum, default_value_t = EngineKind::Native)]
@@ -89,18 +130,59 @@ fn main() -> ExitCode {
         .init();
 
     let cli = Cli::parse();
-    let (mode, args) = match &cli.command {
-        Command::Pseudonymize(args) => (Mode::Pseudonymize, args),
-        Command::Anonymize(args) => (Mode::Anonymize, args),
+    let result = match &cli.command {
+        Command::Pseudonymize(args) => run_job(Mode::Pseudonymize, args),
+        Command::Anonymize(args) => run_job(Mode::Anonymize, args),
+        Command::Chain(args) => run_chain(args),
     };
 
-    match run_job(mode, args) {
+    match result {
         Ok(code) => code,
         Err(err) => {
             eprintln!("error: {err:#}");
             ExitCode::FAILURE
         }
     }
+}
+
+fn run_chain(args: &ChainArgs) -> anyhow::Result<ExitCode> {
+    let engine = build_engine(&args.engine)?;
+    let report = deident_host::run_chain(&args.manifest, args.mode.into(), engine.as_ref())?;
+
+    println!(
+        "Chain '{}' ({:?}): {} of {} job(s) succeeded",
+        report.name,
+        report.mode,
+        report
+            .jobs
+            .iter()
+            .filter(|j| matches!(j.outcome, JobOutcome::Succeeded { .. }))
+            .count(),
+        report.jobs.len()
+    );
+    for job in &report.jobs {
+        match &job.outcome {
+            JobOutcome::Succeeded { report } => println!(
+                "  {}: ok — {} row(s) -> {}",
+                job.name, report.rows_written, job.output
+            ),
+            JobOutcome::Failed { error } => println!("  {}: FAILED — {error}", job.name),
+        }
+    }
+    for warning in &report.warnings {
+        println!("  warning: {warning}");
+    }
+    if let Some(report_path) = &args.report {
+        std::fs::write(report_path, serde_json::to_vec_pretty(&report)?)
+            .with_context(|| format!("cannot write chain report '{}'", report_path.display()))?;
+        println!("  report: {}", report_path.display());
+    }
+
+    Ok(if report.completed {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
@@ -116,7 +198,7 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
         report_path: args.report.as_deref().map(path_to_string).transpose()?,
     };
 
-    let engine = build_engine(args)?;
+    let engine = build_engine(&args.engine)?;
     let response = engine.run(&request)?;
 
     match response.outcome {
@@ -131,7 +213,7 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
     }
 }
 
-fn build_engine(args: &JobArgs) -> anyhow::Result<Box<dyn Engine>> {
+fn build_engine(args: &EngineArgs) -> anyhow::Result<Box<dyn Engine>> {
     match args.engine {
         EngineKind::Native => Ok(Box::new(NativeEngine)),
         EngineKind::Wasm => {
@@ -201,6 +283,12 @@ fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {
             .map(|f| format!("{} ({})", f.field, f.action))
             .collect();
         println!("  direct identifiers: {}", actions.join(", "));
+    }
+    for finding in &report.patterns {
+        println!(
+            "  pattern '{}' in {}: {} match(es) {}",
+            finding.pattern, finding.field, finding.matches, finding.action
+        );
     }
     if let Some(qi) = &report.quasi_identifiers {
         println!(

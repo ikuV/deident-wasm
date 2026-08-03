@@ -9,6 +9,7 @@ AGENT_PLAN.md
 /jobs
 out.csv
 report.json
+examples/chains/out/
 *.vault
 *.vault.jsonl
 

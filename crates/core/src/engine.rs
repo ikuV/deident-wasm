@@ -4,11 +4,11 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
-use deident_types::{DirectIdentifierFinding, Mode, RiskReport};
+use deident_types::{DirectIdentifierFinding, Mode, PatternFinding, RiskReport};
 
 use crate::error::CoreError;
 use crate::key;
-use crate::policy::{AnonymizeCfg, FieldClass, Policy, UnlistedAction};
+use crate::policy::{AnonymizeCfg, FieldClass, PatternAction, Policy, UnlistedAction};
 use crate::report;
 use crate::transform;
 use crate::vault::{MappingEntry, MappingVault};
@@ -17,10 +17,166 @@ use crate::vault::{MappingEntry, MappingVault};
 enum ColumnAction {
     Keep,
     Drop,
-    /// Deterministic tokenization (pseudonymize mode).
-    Token { prefix: Option<String> },
+    /// Deterministic tokenization (pseudonymize mode). `domain` is the
+    /// identity namespace the token is derived in (column name unless the
+    /// policy overrides it for cross-file linkage).
+    Token { prefix: Option<String>, domain: String },
     /// Value-level anonymization strategy.
     Transform(AnonymizeCfg),
+}
+
+/// Compiled content-pattern rules plus per-column applicability and counts.
+struct Patterns<'p> {
+    rules: Vec<(&'p crate::policy::PatternRule, regex::Regex)>,
+    /// For each input column: indices into `rules` that scan it.
+    per_column: Vec<Vec<usize>>,
+    /// Match counts: `counts[rule][column]`.
+    counts: Vec<Vec<u64>>,
+}
+
+impl<'p> Patterns<'p> {
+    /// Compile the policy's rules and work out which columns each scans.
+    /// Dropped and tokenized columns are never scanned (nothing left to find).
+    fn compile(
+        policy: &'p Policy,
+        headers: &csv::StringRecord,
+        actions: &[ColumnAction],
+    ) -> Result<Self, CoreError> {
+        let mut rules = Vec::with_capacity(policy.patterns.len());
+        for rule in &policy.patterns {
+            let regex = regex::Regex::new(rule.regex_source()).map_err(|err| {
+                CoreError::Policy(format!("pattern '{}': invalid regex: {err}", rule.name))
+            })?;
+            rules.push((rule, regex));
+        }
+        let per_column: Vec<Vec<usize>> = headers
+            .iter()
+            .enumerate()
+            .map(|(col, header)| {
+                if !matches!(actions[col], ColumnAction::Keep | ColumnAction::Transform(_)) {
+                    return Vec::new();
+                }
+                rules
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (rule, _))| {
+                        rule.fields
+                            .as_ref()
+                            .is_none_or(|fields| fields.iter().any(|f| f == header))
+                    })
+                    .map(|(i, _)| i)
+                    .collect()
+            })
+            .collect();
+        let counts = vec![vec![0u64; headers.len()]; rules.len()];
+        Ok(Self { rules, per_column, counts })
+    }
+
+    /// Whether any rule tokenizes matches (and therefore needs a key).
+    fn needs_key(&self) -> bool {
+        self.rules
+            .iter()
+            .any(|(rule, _)| rule.action == PatternAction::Token)
+    }
+
+    /// Run the applicable rules over one (already column-transformed) cell.
+    fn apply(
+        &mut self,
+        col: usize,
+        value: String,
+        dataset_key: Option<&[u8; 32]>,
+        vault: &mut dyn MappingVault,
+    ) -> Result<String, CoreError> {
+        if value.is_empty() || self.per_column[col].is_empty() {
+            return Ok(value);
+        }
+        let mut current = value;
+        for i in self.per_column[col].clone() {
+            let (rule, regex) = &self.rules[i];
+            match rule.action {
+                PatternAction::Detect => {
+                    self.counts[i][col] += regex.find_iter(&current).count() as u64;
+                }
+                PatternAction::Redact => {
+                    let label = rule
+                        .replacement
+                        .clone()
+                        .unwrap_or_else(|| format!("[{}]", rule.name.to_uppercase()));
+                    let mut matches = 0u64;
+                    let replaced = regex.replace_all(&current, |_: &regex::Captures| {
+                        matches += 1;
+                        label.clone()
+                    });
+                    if matches > 0 {
+                        current = replaced.into_owned();
+                        self.counts[i][col] += matches;
+                    }
+                }
+                PatternAction::Token => {
+                    let key = dataset_key.expect("key resolved when token patterns exist");
+                    let domain = format!("pattern:{}", rule.name);
+                    let mut mappings: Vec<MappingEntry> = Vec::new();
+                    let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
+                        let matched = caps.get(0).expect("group 0 always exists").as_str();
+                        let token = key::token(key, &domain, matched, rule.prefix.as_deref());
+                        mappings.push(MappingEntry {
+                            field: domain.clone(),
+                            original: matched.to_string(),
+                            token: token.clone(),
+                        });
+                        token
+                    });
+                    if !mappings.is_empty() {
+                        current = replaced.into_owned();
+                        self.counts[i][col] += mappings.len() as u64;
+                        for entry in mappings {
+                            vault.record(entry)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(current)
+    }
+
+    /// Aggregate findings and mode-dependent warnings for the report.
+    fn findings(
+        &self,
+        headers: &csv::StringRecord,
+        mode: Mode,
+        warnings: &mut Vec<String>,
+    ) -> Vec<PatternFinding> {
+        let mut findings = Vec::new();
+        for (i, (rule, _)) in self.rules.iter().enumerate() {
+            let mut rule_total = 0u64;
+            for (col, header) in headers.iter().enumerate() {
+                let matches = self.counts[i][col];
+                if matches > 0 {
+                    findings.push(PatternFinding {
+                        pattern: rule.name.clone(),
+                        field: header.to_string(),
+                        matches,
+                        action: rule.action.action_name().to_string(),
+                    });
+                    rule_total += matches;
+                }
+            }
+            if rule_total > 0 {
+                match rule.action {
+                    PatternAction::Detect => warnings.push(format!(
+                        "pattern '{}' matched {rule_total} time(s) (action: detect); matching values remain in the output",
+                        rule.name
+                    )),
+                    PatternAction::Token if mode == Mode::Anonymize => warnings.push(format!(
+                        "pattern '{}' inserted deterministic tokens; treat the affected output as pseudonymous (reversible with the key material)",
+                        rule.name
+                    )),
+                    _ => {}
+                }
+            }
+        }
+        findings
+    }
 }
 
 /// Run one CSV job: read from `input`, write the transformed CSV to `output`,
@@ -36,11 +192,6 @@ pub fn run_csv_job<R: Read, W: Write>(
 
     let mut warnings: Vec<String> = Vec::new();
     let mut findings: Vec<DirectIdentifierFinding> = Vec::new();
-
-    let dataset_key = match mode {
-        Mode::Pseudonymize => Some(key::resolve_dataset_key(policy, &mut warnings)?),
-        Mode::Anonymize => None,
-    };
 
     let mut reader = csv::Reader::from_reader(input);
     let headers = reader.headers()?.clone();
@@ -64,6 +215,15 @@ pub fn run_csv_job<R: Read, W: Write>(
             &mut warnings,
         )?);
     }
+    let mut patterns = Patterns::compile(policy, &headers, &actions)?;
+
+    // Pseudonymize mode always tokenizes; token-action patterns need the key
+    // in either mode.
+    let dataset_key = if mode == Mode::Pseudonymize || patterns.needs_key() {
+        Some(key::resolve_dataset_key(policy, &mut warnings)?)
+    } else {
+        None
+    };
 
     // Quasi-identifier columns that survive into the output are grouped
     // (on their transformed values) for the equivalence-class statistics.
@@ -109,19 +269,18 @@ pub fn run_csv_job<R: Read, W: Write>(
             let transformed = match action {
                 ColumnAction::Drop => None,
                 ColumnAction::Keep => Some(cell.to_string()),
-                ColumnAction::Token { prefix } => {
+                ColumnAction::Token { prefix, domain } => {
                     if cell.is_empty() {
                         Some(String::new())
                     } else {
-                        let field = &headers[i];
                         let token = key::token(
                             dataset_key.as_ref().expect("key resolved in pseudonymize mode"),
-                            field,
+                            domain,
                             cell,
                             prefix.as_deref(),
                         );
                         vault.record(MappingEntry {
-                            field: field.to_string(),
+                            field: domain.clone(),
                             original: cell.to_string(),
                             token: token.clone(),
                         })?;
@@ -137,6 +296,7 @@ pub fn run_csv_job<R: Read, W: Write>(
                 }),
             };
             if let Some(value) = transformed {
+                let value = patterns.apply(i, value, dataset_key.as_ref(), vault)?;
                 if qi_columns.contains(&i) {
                     qi_tuple.push(value.clone());
                 }
@@ -159,6 +319,8 @@ pub fn run_csv_job<R: Read, W: Write>(
         ));
     }
 
+    let pattern_findings = patterns.findings(&headers, mode, &mut warnings);
+
     Ok(RiskReport {
         dataset: policy.dataset.clone(),
         mode,
@@ -166,6 +328,7 @@ pub fn run_csv_job<R: Read, W: Write>(
         rows_written,
         direct_identifiers: findings,
         quasi_identifiers: report::build_quasi_summary(qi_fields, &classes),
+        patterns: pattern_findings,
         warnings,
         limitations: report::LIMITATIONS.iter().map(|s| s.to_string()).collect(),
     })
@@ -208,6 +371,11 @@ fn plan_column(
                 });
                 ColumnAction::Token {
                     prefix: field.pseudonymize.as_ref().and_then(|c| c.prefix.clone()),
+                    domain: field
+                        .pseudonymize
+                        .as_ref()
+                        .and_then(|c| c.domain.clone())
+                        .unwrap_or_else(|| header.to_string()),
                 }
             }
             _ => ColumnAction::Keep,

@@ -129,6 +129,137 @@ fn anonymize_suppresses_unparsable_values() {
     assert!(report.warnings.iter().any(|w| w.contains("suppressed")));
 }
 
+const PATTERN_POLICY: &str = r#"
+version: 1
+dataset: pattern-test
+key:
+  inline: "integration-test-secret"
+on_unlisted: error
+fields:
+  - name: id
+    class: direct_identifier
+  - name: notes
+    class: utility
+patterns:
+  - name: iban
+    builtin: iban
+    fields: [notes]
+    action: redact
+  - name: email
+    builtin: email
+    action: token
+    prefix: "em_"
+  - name: phone
+    builtin: phone
+    fields: [notes]
+    action: detect
+"#;
+
+#[test]
+fn patterns_detect_redact_and_tokenize_in_free_text() {
+    let policy = Policy::from_yaml(PATTERN_POLICY).unwrap();
+    let input = "id,notes\n\
+        1,pay to DE89370400440532013000 or mail ada@example.com\n\
+        2,call +49 89 1234567 twice\n\
+        3,plain note\n";
+    let mut out = Vec::new();
+    let report = run_csv_job(
+        Mode::Anonymize,
+        &policy,
+        input.as_bytes(),
+        &mut out,
+        &mut NoopVault,
+    )
+    .unwrap();
+    let out = String::from_utf8(out).unwrap();
+
+    assert!(!out.contains("DE89370400440532013000"), "IBAN must be redacted");
+    assert!(out.contains("[IBAN]"));
+    assert!(!out.contains("ada@example.com"), "email must be tokenized");
+    assert!(out.contains("em_"), "email token must carry its prefix");
+    assert!(out.contains("+49 89 1234567"), "detect must leave values in place");
+
+    let find = |p: &str| report.patterns.iter().find(|f| f.pattern == p).unwrap();
+    assert_eq!(find("iban").action, "redacted");
+    assert_eq!(find("iban").matches, 1);
+    assert_eq!(find("email").action, "tokenized");
+    assert_eq!(find("phone").action, "detected");
+    assert!(
+        report.warnings.iter().any(|w| w.contains("action: detect")),
+        "detect-only matches must be surfaced as a warning"
+    );
+    assert!(
+        report.warnings.iter().any(|w| w.contains("pseudonymous")),
+        "tokens in anonymize output must be flagged as pseudonymous"
+    );
+
+    // Token patterns are deterministic: the same email in a second run gets
+    // the same token.
+    let mut out2 = Vec::new();
+    run_csv_job(Mode::Anonymize, &policy, input.as_bytes(), &mut out2, &mut NoopVault).unwrap();
+    assert_eq!(out, String::from_utf8(out2).unwrap());
+}
+
+#[test]
+fn token_pattern_without_key_fails() {
+    let yaml = r#"
+version: 1
+dataset: no-key
+fields:
+  - name: notes
+    class: utility
+patterns:
+  - name: email
+    builtin: email
+    action: token
+"#;
+    let policy = Policy::from_yaml(yaml).unwrap();
+    let err = run_csv_job(
+        Mode::Anonymize,
+        &policy,
+        "notes\nhello\n".as_bytes(),
+        &mut Vec::new(),
+        &mut NoopVault,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("key"));
+}
+
+#[test]
+fn shared_domain_links_tokens_across_differently_named_columns() {
+    let policy_a = r#"
+version: 1
+dataset: linked
+key: { inline: "integration-test-secret" }
+fields:
+  - name: patient_id
+    class: direct_identifier
+    pseudonymize: { prefix: "pid_" }
+"#;
+    let policy_b = r#"
+version: 1
+dataset: linked
+key: { inline: "integration-test-secret" }
+fields:
+  - name: patient_ref
+    class: direct_identifier
+    pseudonymize: { prefix: "pid_", domain: patient_id }
+"#;
+    let token_from = |policy_yaml: &str, header: &str| {
+        let policy = Policy::from_yaml(policy_yaml).unwrap();
+        let input = format!("{header}\nP001\n");
+        let mut out = Vec::new();
+        run_csv_job(Mode::Pseudonymize, &policy, input.as_bytes(), &mut out, &mut NoopVault)
+            .unwrap();
+        String::from_utf8(out).unwrap().lines().nth(1).unwrap().to_string()
+    };
+    assert_eq!(
+        token_from(policy_a, "patient_id"),
+        token_from(policy_b, "patient_ref"),
+        "same domain + dataset + key must yield the same token"
+    );
+}
+
 #[test]
 fn unlisted_columns_fail_by_default() {
     let policy = Policy::from_yaml(POLICY).unwrap();

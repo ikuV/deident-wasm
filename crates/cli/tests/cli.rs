@@ -125,6 +125,81 @@ fn anonymize_through_wasm_sandbox_matches_native() {
 }
 
 #[test]
+fn chain_pseudonymize_links_tokens_and_writes_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Manifest in a temp dir referencing the example data/policies by
+    // absolute path; outputs stay in the temp dir.
+    let manifest = tmp.path().join("chain.yaml");
+    std::fs::write(
+        &manifest,
+        format!(
+            r#"
+version: 1
+name: cli-chain-test
+jobs:
+  - name: patients
+    input: {patients}
+    policy: {patients_policy}
+    output: out/patients.csv
+  - name: visits
+    input: {visits}
+    policy: {visits_policy}
+    output: out/visits.csv
+"#,
+            patients = example("data/patients.csv").display(),
+            patients_policy = example("policies/patients.yaml").display(),
+            visits = example("data/visits.csv").display(),
+            visits_policy = example("policies/visits.yaml").display(),
+        ),
+    )
+    .unwrap();
+    let report_path = tmp.path().join("chain-report.json");
+
+    deident()
+        .arg("chain")
+        .arg(&manifest)
+        .arg("--mode")
+        .arg("pseudonymize")
+        .arg("--report")
+        .arg(&report_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 of 2 job(s) succeeded"));
+
+    let patients = std::fs::read_to_string(tmp.path().join("out/patients.csv")).unwrap();
+    let visits = std::fs::read_to_string(tmp.path().join("out/visits.csv")).unwrap();
+    // P001 is row 1 in patients.csv and referenced by V100/V101 in visits.csv.
+    let p001_token = patients.lines().nth(1).unwrap().split(',').next().unwrap();
+    let v100_ref = visits.lines().nth(1).unwrap().split(',').nth(1).unwrap();
+    assert!(p001_token.starts_with("pid_"));
+    assert_eq!(p001_token, v100_ref, "cross-file join must survive");
+
+    let report: deident_types::ChainReport =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).unwrap()).unwrap();
+    assert!(report.completed);
+    assert_eq!(report.jobs.len(), 2);
+}
+
+#[test]
+fn anonymize_redacts_iban_pattern_in_notes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out.csv");
+    deident()
+        .arg("anonymize")
+        .arg(example("data/patients.csv"))
+        .arg("--policy")
+        .arg(example("policies/patients.yaml"))
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pattern 'iban' in notes: 1 match(es) redacted"));
+    let csv = std::fs::read_to_string(&out).unwrap();
+    assert!(!csv.contains("DE89370400440532013000"), "IBAN must not survive");
+    assert!(csv.contains("[IBAN]"));
+}
+
+#[test]
 fn missing_input_fails_with_nonzero_exit() {
     let tmp = tempfile::tempdir().unwrap();
     deident()

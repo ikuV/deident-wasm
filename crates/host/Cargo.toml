@@ -10,7 +10,9 @@ deident-types = { workspace = true }
 deident-core = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 

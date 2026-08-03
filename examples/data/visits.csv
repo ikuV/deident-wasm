@@ -1,0 +1,9 @@
+visit_id,patient_ref,visit_date,ward,cost_eur
+V100,P001,2024-03-14,pulmonology,220.50
+V101,P001,2024-04-02,pulmonology,80.00
+V102,P002,2024-07-02,endocrinology,340.00
+V103,P003,2023-11-20,cardiology,190.25
+V104,P005,2024-01-19,general,60.00
+V105,P006,2024-09-30,orthopedics,120.75
+V106,P010,2022-06-16,cardiology,410.00
+V107,P012,2024-10-07,endocrinology,95.50
