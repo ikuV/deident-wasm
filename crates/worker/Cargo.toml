@@ -1,0 +1,15 @@
+[package]
+name = "deident-worker"
+description = "Wasm guest worker that executes one deident job inside its sandbox"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "deident-worker"
+path = "src/main.rs"
+
+[dependencies]
+deident-types = { workspace = true }
+deident-core = { workspace = true }
+serde_json = { workspace = true }

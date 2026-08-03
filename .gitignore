@@ -1,0 +1,23 @@
+# build artifacts
+/target
+**/*.wasm
+
+# agent working files
+AGENT_PLAN.md
+
+# per-job workspaces & local run outputs
+/jobs
+out.csv
+report.json
+*.vault
+*.vault.jsonl
+
+# secrets / local env
+.env
+.env.*
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp

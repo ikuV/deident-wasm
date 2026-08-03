@@ -1,0 +1,13 @@
+patient_id,full_name,email,age,zip,admission_date,diagnosis,notes
+P001,Alice Muster,alice.muster@example.com,34,81549,2024-03-14,J45.909,follow-up in 6 weeks
+P002,Bruno Beispiel,bruno@example.org,37,81541,2024-07-02,E11.9,newly diagnosed
+P003,Carla Demo,carla.demo@example.com,52,80331,2023-11-20,I10,medication adjusted
+P004,Deniz Test,deniz@example.net,58,80333,2023-05-08,I10,stable
+P005,Erik Probe,erik.probe@example.com,29,85354,2024-01-19,J06.9,resolved
+P006,Fatma Muster,fatma@example.com,31,81549,2024-09-30,M54.5,physio referral
+P007,Georg Beispiel,georg@example.org,36,81547,2024-02-11,K21.0,dietary advice
+P008,Hana Demo,hana.demo@example.net,45,80335,2023-08-27,F32.1,therapy ongoing
+P009,Igor Test,igor@example.com,49,80339,2023-12-05,E78.5,statin started
+P010,Julia Probe,julia.probe@example.org,63,85356,2022-06-16,I25.10,cardiology referral
+P011,Karim Muster,karim@example.net,27,85354,2024-04-23,J45.909,inhaler renewed
+P012,Lena Beispiel,lena@example.com,33,81541,2024-10-07,E11.9,HbA1c improved

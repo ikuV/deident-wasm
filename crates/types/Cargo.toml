@@ -1,0 +1,12 @@
+[package]
+name = "deident-types"
+description = "Shared request/response and report models for the deident privacy transformation engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

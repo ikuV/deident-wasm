@@ -1,0 +1,12 @@
+[package]
+name = "deident-host"
+description = "Execution engines (native, wasm sandbox) for the deident privacy transformation engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+deident-types = { workspace = true }
+deident-core = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

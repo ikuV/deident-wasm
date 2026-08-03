@@ -1,0 +1,56 @@
+# Example policy for examples/data/patients.csv
+#
+# Classes:
+#   direct_identifier — identifies a person on its own
+#   quasi_identifier  — identifying in combination with other fields
+#   sensitive         — sensitive payload, kept but tracked in the report
+#   utility           — analytic utility only
+version: 1
+dataset: patients-demo
+
+# Pseudonymization key. In production, set only `env` and provide the secret
+# via that environment variable. The inline fallback exists so the demo runs
+# out of the box and always produces a warning in the report.
+key:
+  env: DEIDENT_KEY
+  inline: "demo-secret-do-not-use-in-production"
+
+# Deny-by-default: any CSV column not listed below fails the job.
+on_unlisted: error
+
+fields:
+  - name: patient_id
+    class: direct_identifier
+    pseudonymize:
+      prefix: "pid_"
+
+  - name: full_name
+    class: direct_identifier
+    # anonymize default for direct identifiers: remove
+
+  - name: email
+    class: direct_identifier
+
+  - name: age
+    class: quasi_identifier
+    anonymize:
+      strategy: bucket
+      width: 10
+
+  - name: zip
+    class: quasi_identifier
+    anonymize:
+      strategy: keep_prefix
+      chars: 3
+
+  - name: admission_date
+    class: quasi_identifier
+    anonymize:
+      strategy: date_truncate
+      granularity: year
+
+  - name: diagnosis
+    class: sensitive
+
+  - name: notes
+    class: utility
