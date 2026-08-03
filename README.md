@@ -1,0 +1,307 @@
+# deident
+
+**Privacy transformation engine for structured datasets** — pseudonymization and
+risk-assessed anonymization for CSV files, driven by a declarative YAML policy.
+
+```
+$ deident anonymize patients.csv --policy patients.yaml --out anon.csv --report report.json
+Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
+  direct identifiers: patient_id (removed), full_name (removed), email (removed)
+  quasi-identifiers [age, zip, admission_date]: 5 equivalence class(es), min size 1, 1 unique row(s) (8.3%)
+  output: anon.csv
+  report: report.json
+```
+
+## Two modes, two very different promises
+
+| | `pseudonymize` | `anonymize` |
+|---|---|---|
+| Reversible? | **Yes** — with the key material | **No** — values are removed or generalized |
+| Output is still personal data? | **Yes.** Treat it as such. | Reduced risk, **not** zero risk |
+| What happens to direct identifiers | replaced with deterministic tokens | removed (or redacted) |
+| What happens to quasi-identifiers | kept unchanged | generalized/suppressed per policy |
+| Typical use | joinable test/analytics data, debugging with real structure | sharing data with reduced re-identification risk |
+
+> ⚠️ **No guarantees.** This tool performs *risk-assessed* anonymization: it reduces
+> re-identification risk and measures residual risk signals, but it cannot certify
+> anonymity — that always depends on external data and context it cannot observe.
+> Pseudonymized output remains personal data and is reversible by anyone holding the
+> key material, so protect keys separately from outputs.
+
+## Status
+
+MVP. CSV in/out, native execution. Per-job WebAssembly sandbox execution
+(Wasmtime + WASI, fresh store per job, deny-by-default capabilities, no network),
+JSONL/Parquet support and an encrypted mapping vault are on the roadmap — see
+[Roadmap](#roadmap).
+
+## Installation
+
+Requires a Rust toolchain (1.96+).
+
+```bash
+git clone <this-repo> && cd deident-wasm
+
+# run tests, then install the `deident` binary onto your PATH
+cargo test --workspace
+cargo install --path crates/cli
+
+# — or just build and use it from target/release/
+cargo build --release
+./target/release/deident --help
+```
+
+## Quick start
+
+The repo ships a demo dataset and policy:
+
+```bash
+# reversible: tokenize direct identifiers, keep everything else
+deident pseudonymize examples/data/patients.csv \
+  --policy examples/policies/patients.yaml \
+  --out pseudo.csv
+
+# irreversible: remove/generalize identifiers, write a risk report
+deident anonymize examples/data/patients.csv \
+  --policy examples/policies/patients.yaml \
+  --out anon.csv \
+  --report report.json
+```
+
+To run against your own data you need a policy file that lists **every column**
+of your CSV — see [Policy reference](#policy-reference).
+
+## CLI reference
+
+```
+deident <COMMAND> [OPTIONS]
+```
+
+| Command | Description |
+|---|---|
+| `pseudonymize <INPUT> --policy <FILE> --out <FILE> [--report <FILE>]` | Reversibly tokenize direct identifiers (deterministic per dataset/policy) |
+| `anonymize <INPUT> --policy <FILE> --out <FILE> [--report <FILE>]` | Irreversibly remove/generalize identifiers and produce a risk report |
+| `help [COMMAND]` | Print help |
+
+Options (identical for both commands):
+
+| Option | Required | Description |
+|---|---|---|
+| `<INPUT>` | yes | Input CSV file (first row must be the header) |
+| `--policy <FILE>` | yes | Policy YAML describing field classes and strategies |
+| `--out <FILE>` | yes | Output CSV file |
+| `--report <FILE>` | no | Write the JSON risk report to this path |
+| `-h, --help` | | Print help |
+| `-v, -V, --version` | | Print version |
+
+Environment:
+
+| Variable | Purpose |
+|---|---|
+| `DEIDENT_KEY` (or whatever the policy's `key.env` names) | Secret for pseudonymization key derivation |
+| `RUST_LOG` | Log verbosity on stderr, e.g. `RUST_LOG=debug` (default `info`) |
+
+Exit codes: `0` success, non-zero on any failure (bad policy, unreadable input,
+unlisted column, missing key, ...). Human summary goes to stdout, logs to stderr.
+
+## Policy reference
+
+A policy is a YAML file that classifies every column and configures how each mode
+treats it. Complete annotated example:
+
+```yaml
+version: 1                  # required; only 1 is supported
+dataset: patients-demo      # required; scopes key derivation (see Key management)
+
+key:                        # required for pseudonymize, ignored by anonymize
+  env: DEIDENT_KEY          # name of the env var holding the secret (preferred)
+  inline: "demo-secret"     # fallback secret — demos/tests only, always warned
+
+on_unlisted: error          # what to do with CSV columns not listed below:
+                            #   error  – fail the job (default, deny-by-default)
+                            #   keep   – pass through unchanged + warning
+                            #   remove – drop the column + warning
+
+fields:
+  - name: patient_id                # column name, must match the CSV header
+    class: direct_identifier        # see field classes below
+    pseudonymize:                   # optional, pseudonymize mode only
+      prefix: "pid_"                # cosmetic token prefix
+
+  - name: email
+    class: direct_identifier        # no config needed: tokenized in pseudonymize
+                                    # mode, removed in anonymize mode by default
+
+  - name: age
+    class: quasi_identifier
+    anonymize:                      # anonymize-mode strategy (see below)
+      strategy: bucket
+      width: 10
+
+  - name: zip
+    class: quasi_identifier
+    anonymize:
+      strategy: keep_prefix
+      chars: 3
+      pad: "*"                      # optional, default '*'
+
+  - name: admission_date
+    class: quasi_identifier
+    anonymize:
+      strategy: date_truncate
+      granularity: year             # year | year_month
+
+  - name: diagnosis
+    class: sensitive
+
+  - name: notes
+    class: utility
+```
+
+Unknown YAML keys anywhere in the policy are rejected (typos fail fast).
+
+### Field classes
+
+| Class | Meaning | Pseudonymize mode | Anonymize mode |
+|---|---|---|---|
+| `direct_identifier` | Identifies a person on its own (name, email, ID number) | tokenized | removed (default) or the configured strategy |
+| `quasi_identifier` | Identifying in combination (age, zip, dates) | kept unchanged | configured strategy; kept + **warning** if none |
+| `sensitive` | Sensitive payload (diagnosis, salary) | kept unchanged | kept, unless a strategy is configured |
+| `utility` | Analytic utility only | kept unchanged | kept, unless a strategy is configured |
+
+### Anonymization strategies
+
+Set under a field's `anonymize:` block; applied only in `anonymize` mode.
+
+| `strategy` | Parameters | Example |
+|---|---|---|
+| `remove` | — | column is dropped entirely |
+| `redact` | `replacement` (default `"REDACTED"`) | `Alice` → `REDACTED` |
+| `bucket` | `width` (positive integer) | width 10: `34` → `30-39`, `-3` → `-10--1`; floats floored |
+| `date_truncate` | `granularity`: `year` \| `year_month` | `2024-03-14` → `2024` or `2024-03`; ISO dates/timestamps only |
+| `keep_prefix` | `chars`, `pad` (default `*`) | chars 3: `81549` → `815**` |
+
+Values that don't fit their strategy (e.g. `bucket` on `n/a`, `date_truncate` on
+`14.03.2024`) are suppressed to `*` and counted in the report warnings — a single
+bad cell never fails the job. Empty cells always pass through empty.
+
+### Pseudonymization options
+
+Set under a field's `pseudonymize:` block; applied only in `pseudonymize` mode and
+only to `direct_identifier` fields (which are tokenized with or without this block).
+
+| Key | Description |
+|---|---|
+| `prefix` | Cosmetic prefix prepended to the token, e.g. `pid_` → `pid_21134bb99aee85cb...` |
+
+## Key management
+
+Pseudonym tokens are 128-bit BLAKE3 keyed hashes. The key is derived from your
+secret **and the policy's `dataset` name**, and the hash input includes the column
+name. Consequences:
+
+- **Same secret + same policy ⇒ same tokens.** Runs are repeatable, and repeated
+  exports of the same dataset stay joinable on their tokens.
+- The same value produces **different tokens in different columns and different
+  datasets** — tokens can't be used to link across datasets by accident.
+- Without the secret, tokens cannot be reversed or recomputed. **Whoever has the
+  secret can re-identify.** Store it in a secret manager, never next to the output.
+
+Provide the secret via the environment variable named in `key.env`:
+
+```bash
+export DEIDENT_KEY="$(your-secret-manager get deident-prod)"
+deident pseudonymize ...
+```
+
+`key.inline` embeds the secret in the policy file — useful for demos and tests,
+unsafe for production. Every run using it records a warning in the report.
+
+## Risk report
+
+`--report <FILE>` writes a JSON document (also available for `pseudonymize`):
+
+```json
+{
+  "dataset": "patients-demo",
+  "mode": "anonymize",
+  "rows_read": 12,
+  "rows_written": 12,
+  "direct_identifiers": [
+    { "field": "patient_id", "action": "removed" },
+    { "field": "full_name", "action": "removed" },
+    { "field": "email", "action": "removed" }
+  ],
+  "quasi_identifiers": {
+    "fields": ["age", "zip", "admission_date"],
+    "equivalence_classes": 5,
+    "min_class_size": 1,
+    "max_class_size": 5,
+    "mean_class_size": 2.4,
+    "unique_rows": 1,
+    "unique_row_ratio": 0.0833,
+    "k_thresholds": [
+      { "k": 2, "rows_at_or_above": 11, "ratio": 0.9167 },
+      { "k": 5, "rows_at_or_above": 5, "ratio": 0.4167 },
+      { "k": 10, "rows_at_or_above": 0, "ratio": 0.0 }
+    ]
+  },
+  "warnings": [],
+  "limitations": [ "This report supports a risk assessment; it does not certify or guarantee anonymization.", "..." ]
+}
+```
+
+How to read the `quasi_identifiers` block: rows are grouped by their combination of
+(transformed) quasi-identifier values — each distinct combination is an
+*equivalence class*. Small classes mean higher re-identification risk:
+
+- `min_class_size` — the k in "k-anonymity style" terms; 1 means at least one row
+  is unique on its quasi-identifiers.
+- `unique_rows` / `unique_row_ratio` — rows that are one-of-a-kind. These are the
+  riskiest rows; consider coarser generalization if this isn't near zero.
+- `k_thresholds` — share of rows living in classes of at least size k (2, 5, 10).
+
+`warnings` surfaces anything that needs human attention: inline key usage,
+quasi-identifiers without a strategy, suppressed values, unlisted-but-kept columns.
+The `limitations` block is embedded in every report by design.
+
+## Security model & non-goals
+
+- Anonymization here is **risk-assessed, never guaranteed**. The report measures
+  what it can; residual risk always remains and depends on context.
+- Pseudonymized data **remains personal data** under most privacy regimes (e.g.
+  GDPR). Reversal requires only the key material — protect it separately.
+- Deny-by-default policy handling: unlisted columns and unknown policy keys fail
+  the job unless explicitly relaxed.
+- Planned (not yet active): each job runs in a fresh WebAssembly sandbox with a
+  preopened job directory as its only filesystem capability, no network, and
+  per-job CPU/memory/time limits. Sandboxing *reduces* the blast radius of risky
+  parsing logic and future untrusted plugins; it is a mitigation, not an absolute
+  boundary, and no escape-proof claims are made.
+- Non-goals: differential privacy, synthetic data generation, free-text/NLP
+  de-identification, and legal certification of any output.
+
+## Project layout
+
+| Crate | Purpose |
+|---|---|
+| `crates/cli` | `deident` binary — command-line UX |
+| `crates/core` | Policy schema, transforms, job engine, risk reports |
+| `crates/host` | Execution engines: native today, Wasmtime sandbox next |
+| `crates/worker` | Wasm guest that executes one job inside its sandbox |
+| `crates/types` | Shared request/response/report models |
+
+```bash
+cargo test --workspace        # unit + integration tests
+cargo clippy --workspace --all-targets
+```
+
+## Roadmap
+
+- **Wasm sandbox execution** — per-job Wasmtime store + WASI context, single
+  preopened job directory, no network, memory/CPU/time limits, `--engine wasm`.
+- **Encrypted mapping vault** — persist original→token mappings under AEAD for
+  authorized reversal workflows.
+- **More formats** — JSONL, then Parquet.
+- **Audit logs** — structured per-job JSONL (job id, policy hash, counts, limits).
+- **Policy lints** — warn on risky policies before running.

@@ -18,9 +18,14 @@ use deident_types::{JobOutcome, JobRequest, Mode, RiskReport};
 #[command(
     name = "deident",
     version,
+    disable_version_flag = true,
     about = "Privacy transformation engine: pseudonymization and risk-assessed anonymization for structured datasets"
 )]
 struct Cli {
+    /// Print version.
+    #[arg(short = 'v', short_alias = 'V', long, action = clap::ArgAction::Version)]
+    version: Option<bool>,
+
     #[command(subcommand)]
     command: Command,
 }
