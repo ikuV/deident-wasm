@@ -42,9 +42,10 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
   free-text note) with **16 built-in detectors** (email, IBAN, card, SSN, phone,
   IP, URL, API key, passport, plate, IFSC, date of birth, plus heuristic name /
   address / organization / medical-term matchers) or your own regex, then detect,
-  redact, tokenize or replace them with structurally valid fakes —
-  checksum-verified where a checksum exists. See
-  [Built-in detectors](#built-in-detectors).
+  redact, tokenize or replace them with structurally valid fakes. **Eight of the
+  sixteen are validated** by checksum or structural parse (mod-97, Luhn, real
+  calendar dates, IP parsing), so a loose pattern does not cost you false
+  positives. See [Built-in detectors](#built-in-detectors).
 - **Chained datasets** — process several files as one export with shared token
   scoping, so foreign keys still join after pseudonymization. See
   [Chained datasets](#chained-datasets).
@@ -381,29 +382,43 @@ Sixteen detectors, grouped by **how much a match can be trusted**. That grouping
 is the important part: it stops a heuristic guess from being mistaken for a
 verified identifier.
 
-| Detector | Example | Class | Verified by |
-|---|---|---|---|
-| `email` | `user@example.com` | precise | — |
-| `iban` | `DE89 3704 0044 0532 0130 00` | precise | mod-97 (ISO 7064) |
-| `credit_card` | `4111 1111 1111 1111` | precise | Luhn |
-| `ip_address` | `192.168.1.1`, `2001:db8::1` | precise | octet ranges |
-| `url` | `https://internal.company.com` | precise | — |
-| `api_key` | `AKIA…`, `sk-live_…`, `ghp_…`, `xoxb-…`, `glpat-…` | precise | — |
-| `ifsc` | `HDFC0001234 000123456789` | precise | — |
-| `phone` | `+1-555-0123`, `+91 98765 43210` | moderate | — |
-| `ssn` | `123-45-6789` | moderate | US allocation rules |
-| `date_of_birth` | `15/03/1990`, `March 15, 1990` | moderate | — |
-| `passport` | `J1234567` | moderate | — |
-| `license_plate` | `MH 12 AB 1234` | moderate | — |
-| `person_name` | `Dr. Priya Sharma`, `John Smith` | **heuristic** | — |
-| `address` | `123 MG Road, Pune 411001` | **heuristic** | — |
-| `organization` | `Apollo Hospital`, `HDFC Bank` | **heuristic** | — |
-| `medical_term` | `diabetes`, `cardiac arrest` | **heuristic** | — |
+**Eight of the sixteen are validated** beyond their pattern — the match must also
+pass a checksum or a structural parse before it counts.
 
-- **precise** — distinctive syntax, mostly checksum-verified. Safe to redact
-  unattended.
-- **moderate** — a recognisable shape that innocent data also has. Expect some
-  false positives; read the report.
+| Detector | Example | Class | Validated by |
+|---|---|---|---|
+| `email` | `user@example.com` | precise | ✅ RFC 5321 structure: single `@`, length limits, dotted domain, alphabetic TLD |
+| `iban` | `DE89 3704 0044 0532 0130 00` | precise | ✅ mod-97 (ISO 7064) check digits |
+| `credit_card` | `4111 1111 1111 1111` | precise | ✅ Luhn **plus** card length (13–19) and issuer prefix (2–6) |
+| `ip_address` | `192.168.1.1`, `2001:db8::1` | precise | ✅ parsed as a real address (`std::net::IpAddr`) |
+| `url` | `https://internal.company.com` | precise | ✅ known scheme, plausible host, no whitespace |
+| `api_key` | `AKIA…`, `sk-proj-…`, `github_pat_…`, `xoxb-…`, `glpat-…` | precise | — opaque by design |
+| `ifsc` | `HDFC0001234 000123456789` | precise | — no checksum exists |
+| `ssn` | `123-45-6789` | moderate | ✅ US allocation rules (area ≠ 000/666/9xx, group ≠ 00, serial ≠ 0000) |
+| `date_of_birth` | `15/03/1990`, `March 15, 1990` | moderate | ✅ a real calendar date (rejects `31/02`, leap years honoured) |
+| `phone` | `+1-555-0123`, `+91 98765 43210` | moderate | ✅ E.164 limits: 7–15 digits, no `+0` country code |
+| `license_plate` | `MH 12 AB 1234` | moderate | — no check digit |
+| `passport` | `J1234567` | moderate | — no check digit |
+| `address` | `123 MG Road, Pune 411001` | **heuristic** | — not verifiable |
+| `organization` | `Apollo Hospital`, `HDFC Bank` | **heuristic** | — not verifiable |
+| `medical_term` | `diabetes`, `cardiac arrest` | **heuristic** | — gazetteer membership only |
+| `person_name` | `Dr. Priya Sharma`, `John Smith` | **heuristic** | — not verifiable |
+
+Rows are listed in **execution order**, which is load-bearing: rules run in
+sequence over the same value, so specific detectors must precede greedy ones.
+`ssn` and `date_of_birth` come before `phone` (which otherwise swallows both),
+and `person_name` runs last because its bare-capitalised-pair alternative
+otherwise claims `Apollo Hospital` and `Cardiac Arrest`.
+
+The eight unvalidated ones are honest gaps, not oversights: a passport number and
+a licence plate carry no check digit, an API key is opaque, and a heuristic is a
+heuristic. A test asserts the validated set is *exactly* those eight, so the table
+cannot drift into claiming verification the code does not perform.
+
+- **precise** — distinctive syntax, and five of the seven are validated. Safe to
+  redact unattended.
+- **moderate** — a recognisable shape that innocent data also has; three of the
+  five are validated. Expect some false positives; read the report.
 - **heuristic** — a stand-in for named entity recognition, which this tool does
   **not** have. These are title-based patterns, suffix lists and a small
   gazetteer. They produce false positives *and* miss real entities. They default
@@ -411,21 +426,40 @@ verified identifier.
   triggers the `heuristic-pattern-modifies-data` lint. Treat them as "show me
   where to look", never as "this text is now clean".
 
-#### Checksum validation
+#### Validation
 
-Detectors with a checksum apply it to **every match**, so a loose regex buys
-recall without paying for it in false positives — a 13-digit order number matches
-the card shape but fails Luhn, so it is not reported as a card.
+Validated detectors apply their check to **every match**, so a loose regex buys
+recall without paying for it in false positives — a long order number matches the
+card shape but fails Luhn, so it is not reported as a card.
 
-Rejected matches are **left untouched and counted**, and the report says so:
+Rejected matches are **left untouched and counted**, and the report names the
+check that rejected them:
 
 > `pattern 'credit_card' rejected 1 match(es) that had the right shape but failed
-> the Luhn checksum, and left them unchanged. Set validate: none to treat them as
-> identifiers anyway (at the cost of false positives)`
+> Luhn + card length/prefix validation, and left them unchanged. Set validate: none
+> to treat them as identifiers anyway (at the cost of false positives)`
 
 That matters for test data: invented card numbers usually fail Luhn, so
 `validate: none` is the right choice when you want every card-shaped string
-flagged regardless.
+flagged regardless. Override per rule with `validate: none` (or name a different
+validator) on any `patterns` entry.
+
+**Validators are deliberately conservative** — they reject only what is definitely
+not the thing. Being too strict produces false *negatives*, a real identifier
+passing through silently, which is worse than a false positive a human dismisses.
+Two consequences worth knowing:
+
+- Ambiguous dates are accepted under **either** reading, because `03/04/1990` is
+  a real date as both DD/MM and MM/DD and guessing wrong would drop a genuine one.
+- `date_of_birth` checks only that the date *exists*, not that it is a plausible
+  birth date. Rejecting future dates would drop appointment dates that a user
+  wants removed.
+
+Two verification opportunities are deliberately left open. Indian **licence-plate
+state codes** would be real validation, but would silently narrow the detector to
+one country and break the European formats its pattern also matches — that
+belongs in per-locale pattern packs. **GitHub tokens carry a CRC32 checksum** in
+their final characters, which is checkable but vendor-specific.
 
 #### Presets
 

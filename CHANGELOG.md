@@ -26,6 +26,26 @@ scalar. Consequences, all now fixed by applying each action **value by value**:
 - Text VRs (`LT`/`ST`/`UT`/`UR`) are exempt, because a backslash there is literal
   content rather than a separator.
 
+### Added
+
+- **Five more validated detectors**, taking verification from 3 of 16 to **8 of
+  16**. `ip_address` is now parsed with `std::net::IpAddr` (exact, where a regex
+  can only approximate — it rejects `1:2:3:4:5:6:7:8:9` and `12:30`);
+  `date_of_birth` must be a real calendar date (`31/02/1990` and `29/02/1900` are
+  rejected, leap years honoured); `email` is checked against RFC 5321 structure;
+  `url` needs a known scheme and plausible host; `phone` must satisfy E.164
+  limits. `credit_card` was upgraded from bare Luhn to Luhn **plus** card length
+  and issuer prefix, because Luhn alone accepts roughly one in ten arbitrary
+  digit strings. Rejection warnings now name the validator that rejected the
+  match.
+
+  Validators are conservative by design: they reject only what is definitely not
+  the thing, since over-strict validation causes false *negatives*. Ambiguous
+  dates are therefore accepted under either DD/MM or MM/DD reading, and
+  `date_of_birth` does not check birth-date plausibility. `api_key`, `ifsc`,
+  `passport`, `license_plate` and the four heuristics remain unvalidated, which a
+  test now pins so the docs cannot over-claim.
+
 **Other correctness fixes**
 
 - Writing the output over the input truncated the source before a byte was read,
