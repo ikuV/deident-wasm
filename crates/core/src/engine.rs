@@ -27,24 +27,29 @@ enum ColumnAction {
 }
 
 /// Compiled content-pattern rules plus per-column applicability and counts.
-struct Patterns<'p> {
-    rules: Vec<(&'p crate::policy::PatternRule, regex::Regex)>,
+struct Patterns {
+    rules: Vec<(crate::policy::PatternRule, regex::Regex)>,
     /// For each input column: indices into `rules` that scan it.
     per_column: Vec<Vec<usize>>,
     /// Match counts: `counts[rule][column]`.
     counts: Vec<Vec<u64>>,
+    /// Matches that had the right shape but failed their checksum, per rule.
+    /// Surfaced as a warning: silently skipping a card-shaped value would leave
+    /// the operator unaware that something looked like an identifier.
+    rejected: Vec<u64>,
 }
 
-impl<'p> Patterns<'p> {
+impl Patterns {
     /// Compile the policy's rules and work out which columns each scans.
     /// Dropped and tokenized columns are never scanned (nothing left to find).
     fn compile(
-        policy: &'p Policy,
+        policy: &Policy,
         headers: &[String],
         actions: &[ColumnAction],
     ) -> Result<Self, CoreError> {
-        let mut rules = Vec::with_capacity(policy.patterns.len());
-        for rule in &policy.patterns {
+        let effective = policy.effective_patterns();
+        let mut rules = Vec::with_capacity(effective.len());
+        for rule in effective {
             let regex = regex::Regex::new(rule.regex_source()).map_err(|err| {
                 CoreError::Policy(format!("pattern '{}': invalid regex: {err}", rule.name))
             })?;
@@ -70,7 +75,8 @@ impl<'p> Patterns<'p> {
             })
             .collect();
         let counts = vec![vec![0u64; headers.len()]; rules.len()];
-        Ok(Self { rules, per_column, counts })
+        let rejected = vec![0u64; rules.len()];
+        Ok(Self { rules, per_column, counts, rejected })
     }
 
     /// Whether any rule derives values from the key (token or mock).
@@ -92,9 +98,19 @@ impl<'p> Patterns<'p> {
         let mut current = value;
         for i in self.per_column[col].clone() {
             let (rule, regex) = &self.rules[i];
+            let validator = rule.validator();
             match rule.action {
                 PatternAction::Detect => {
-                    self.counts[i][col] += regex.find_iter(&current).count() as u64;
+                    // Only count matches that survive validation, so a Luhn-failing
+                    // digit run is not reported as a card — but do record that it
+                    // was rejected.
+                    for found in regex.find_iter(&current) {
+                        if validator.accepts(found.as_str()) {
+                            self.counts[i][col] += 1;
+                        } else {
+                            self.rejected[i] += 1;
+                        }
+                    }
                 }
                 PatternAction::Redact => {
                     let label = rule
@@ -102,10 +118,18 @@ impl<'p> Patterns<'p> {
                         .clone()
                         .unwrap_or_else(|| format!("[{}]", rule.name.to_uppercase()));
                     let mut matches = 0u64;
-                    let replaced = regex.replace_all(&current, |_: &regex::Captures| {
+                    let mut rejected = 0u64;
+                    let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
+                        let matched = caps.get(0).expect("group 0").as_str();
+                        if !validator.accepts(matched) {
+                            // Leave a rejected match exactly as it was.
+                            rejected += 1;
+                            return matched.to_string();
+                        }
                         matches += 1;
                         label.clone()
                     });
+                    self.rejected[i] += rejected;
                     if matches > 0 {
                         current = replaced.into_owned();
                         self.counts[i][col] += matches;
@@ -116,8 +140,13 @@ impl<'p> Patterns<'p> {
                     let domain = format!("pattern:{}", rule.name);
                     let shape = rule.mock_shape();
                     let mut mappings: Vec<MappingEntry> = Vec::new();
+                    let mut rejected = 0u64;
                     let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
                         let matched = caps.get(0).expect("group 0 always exists").as_str();
+                        if !validator.accepts(matched) {
+                            rejected += 1;
+                            return matched.to_string();
+                        }
                         let replacement = match rule.action {
                             PatternAction::Mock => crate::mock::generate(
                                 shape.expect("validated: mock rules have a shape"),
@@ -134,6 +163,7 @@ impl<'p> Patterns<'p> {
                         });
                         replacement
                     });
+                    self.rejected[i] += rejected;
                     if !mappings.is_empty() {
                         current = replaced.into_owned();
                         self.counts[i][col] += mappings.len() as u64;
@@ -168,6 +198,25 @@ impl<'p> Patterns<'p> {
                     });
                     rule_total += matches;
                 }
+            }
+            if self.rejected[i] > 0 {
+                warnings.push(format!(
+                    "pattern '{}' rejected {} match(es) that had the right shape but failed the \
+                     {:?} checksum, and left them unchanged. Set validate: none to treat them as \
+                     identifiers anyway (at the cost of false positives)",
+                    rule.name,
+                    self.rejected[i],
+                    rule.validator()
+                ));
+            }
+            if rule_total > 0
+                && rule.precision() == Some(crate::detect::Precision::Heuristic)
+            {
+                warnings.push(format!(
+                    "pattern '{}' is a heuristic detector (no NER available): its {rule_total} \
+                     match(es) include false positives, and it will have missed real entities",
+                    rule.name
+                ));
             }
             if rule_total > 0 {
                 match rule.action {

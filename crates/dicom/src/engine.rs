@@ -167,6 +167,7 @@ fn resolve_secret(policy: &DicomPolicy) -> Result<Vec<u8>, DicomError> {
         on_unlisted: Default::default(),
         fields: Vec::new(),
         patterns: Vec::new(),
+        presets: Vec::new(),
     };
     let mut warnings = Vec::new();
     deident_core::key::resolve_secret(&probe, &mut warnings)
@@ -236,8 +237,9 @@ fn deidentify_with_cache(
         None
     };
 
-    let mut patterns = Vec::with_capacity(policy.patterns.len());
-    for rule in &policy.patterns {
+    let effective = policy.effective_patterns();
+    let mut patterns = Vec::with_capacity(effective.len());
+    for rule in &effective {
         let regex = regex::Regex::new(rule.regex_source())
             .map_err(|e| DicomError::Policy(format!("pattern '{}': {e}", rule.name)))?;
         patterns.push((rule.clone(), regex));
@@ -578,7 +580,11 @@ fn clean_text(original: &str, ctx: &mut Context, keyword: &str) -> Result<String
     for (rule, regex) in ctx.patterns.clone() {
         match rule.action {
             PatternAction::Detect => {
-                if regex.is_match(&current) {
+                let validator = rule.validator();
+                if regex
+                    .find_iter(&current)
+                    .any(|m| validator.accepts(m.as_str()))
+                {
                     ctx.warnings.push(format!(
                         "{keyword}: pattern '{}' matched but action is detect; the value was left in place",
                         rule.name
@@ -590,14 +596,29 @@ fn clean_text(original: &str, ctx: &mut Context, keyword: &str) -> Result<String
                     .replacement
                     .clone()
                     .unwrap_or_else(|| format!("[{}]", rule.name.to_uppercase()));
-                current = regex.replace_all(&current, label.as_str()).into_owned();
+                let validator = rule.validator();
+                current = regex
+                    .replace_all(&current, |caps: &regex::Captures| {
+                        let matched = caps.get(0).expect("group 0").as_str();
+                        // A match that fails its checksum is not an identifier.
+                        if validator.accepts(matched) {
+                            label.clone()
+                        } else {
+                            matched.to_string()
+                        }
+                    })
+                    .into_owned();
             }
             PatternAction::Token | PatternAction::Mock => {
                 let key = ctx.dataset_key.as_ref().expect("key resolved");
                 let domain = format!("pattern:{}", rule.name);
                 let mut mappings = Vec::new();
+                let validator = rule.validator();
                 let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
                     let matched = caps.get(0).expect("group 0").as_str();
+                    if !validator.accepts(matched) {
+                        return matched.to_string();
+                    }
                     let replacement = match (rule.action, rule.mock_shape()) {
                         (PatternAction::Mock, Some(shape)) => {
                             deident_core::mock::generate(shape, key, &domain, matched)

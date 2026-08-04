@@ -220,6 +220,43 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
     }
 
     // --- pattern rules ---------------------------------------------------
+    let effective = policy.effective_patterns();
+    let mut seen_builtins: std::collections::HashMap<&str, &str> =
+        std::collections::HashMap::new();
+    for pattern in &effective {
+        if let Some(builtin) = pattern.builtin
+            && let Some(first) = seen_builtins.insert(builtin.name(), pattern.name.as_str())
+        {
+            lints.push(Lint::new(
+                "duplicate-builtin-detector",
+                LintLevel::Warning,
+                Some(&pattern.name),
+                format!(
+                    "rules '{first}' and '{}' both use the '{}' detector. Rules run in order over                      the same value, so the first one's replacement hides the matches the second                      would have made — keep one rule per detector",
+                    pattern.name,
+                    builtin.name()
+                ),
+            ));
+        }
+    }
+    for pattern in &effective {
+        if pattern.precision() == Some(crate::detect::Precision::Heuristic)
+            && pattern.action != PatternAction::Detect
+        {
+            lints.push(Lint::new(
+                "heuristic-pattern-modifies-data",
+                LintLevel::Warning,
+                Some(&pattern.name),
+                format!(
+                    "'{}' is a heuristic detector standing in for named entity recognition: it \
+                     produces false positives AND false negatives. With action: {:?} it will \
+                     corrupt innocent values and still miss real ones — prefer action: detect and \
+                     review the findings",
+                    pattern.name, pattern.action
+                ),
+            ));
+        }
+    }
     for pattern in &policy.patterns {
         if pattern.action == PatternAction::Detect {
             lints.push(Lint::new(
