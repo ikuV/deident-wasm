@@ -1,0 +1,71 @@
+# Full-feature policy for examples/data/patients.csv — exercises every
+# transform strategy and all three pattern actions in one policy. Used by the
+# feature-matrix test (crates/cli/tests/matrix.rs) and the feature-matrix CI
+# workflow to verify every feature against the current sample dataset.
+version: 1
+dataset: patients-demo-full
+
+key:
+  env: DEIDENT_KEY
+  inline: "demo-secret-do-not-use-in-production"
+
+on_unlisted: error
+
+fields:
+  - name: patient_id
+    class: direct_identifier
+    pseudonymize:
+      prefix: "pid_"
+    # anonymize default: remove
+
+  - name: full_name
+    class: direct_identifier
+    anonymize:
+      strategy: redact          # direct identifier redacted instead of removed
+
+  - name: email
+    class: direct_identifier    # tokenized (pseudonymize) / removed (anonymize)
+
+  - name: age
+    class: quasi_identifier
+    anonymize:
+      strategy: bucket
+      width: 10
+
+  - name: zip
+    class: quasi_identifier
+    anonymize:
+      strategy: keep_prefix
+      chars: 3
+
+  - name: admission_date
+    class: quasi_identifier
+    anonymize:
+      strategy: date_truncate
+      granularity: year_month   # the finer variant; patients.yaml uses year
+
+  - name: diagnosis
+    class: sensitive
+
+  - name: notes
+    class: utility
+
+# All three pattern actions. Order matters: rules run in sequence, so the
+# IBAN is redacted before the phone rule scans (an IBAN's digit run would
+# otherwise look phone-like), and phone detection runs before email tokens
+# are inserted.
+patterns:
+  - name: iban
+    builtin: iban
+    fields: [notes]
+    action: redact
+
+  - name: phone
+    builtin: phone
+    fields: [notes]
+    action: detect
+
+  - name: email_text
+    builtin: email
+    action: token
+    prefix: "em_"

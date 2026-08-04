@@ -1,0 +1,45 @@
+# Full feature-combination matrix: every mode × engine × run-style against
+# the sample dataset, on multiple OSes. Triggers when the sample data,
+# policies or chain manifests change (the invariants in the matrix test are
+# recomputed from the data, so edits are validated automatically), and can be
+# run manually from the Actions tab.
+name: Feature matrix
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "examples/**"
+      - "crates/cli/tests/matrix.rs"
+      - ".github/workflows/feature-matrix.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "examples/**"
+      - "crates/cli/tests/matrix.rs"
+      - ".github/workflows/feature-matrix.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run feature matrix (mode × engine × single/chain, twice each)
+        run: cargo test -p deident-cli --test matrix -- --nocapture

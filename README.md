@@ -432,9 +432,23 @@ The `limitations` block is embedded in every report by design.
 | `crates/types` | Shared request/response/report models |
 
 ```bash
-cargo test --workspace        # unit + integration tests
+cargo test --workspace        # unit + integration tests (includes the feature matrix)
 cargo clippy --workspace --all-targets
+cargo test -p deident-cli --test matrix   # just the feature-combination matrix
 ```
+
+CI (GitHub Actions):
+
+- `rust.yml` — build, clippy (`-D warnings`) and the full test suite on every
+  push/PR to main.
+- `feature-matrix.yml` — runs every mode × engine × single/chain combination
+  against the sample dataset on Linux and macOS whenever anything under
+  `examples/` changes (plus a manual "Run workflow" button). The matrix test
+  recomputes its expectations from the data itself — determinism, native/wasm
+  byte-parity, identifier survival, pattern counts, chain linkage — so editing
+  the sample dataset automatically re-validates every feature against it.
+  The full-feature policy it uses is
+  [examples/policies/patients-full.yaml](examples/policies/patients-full.yaml).
 
 ## Roadmap
 
