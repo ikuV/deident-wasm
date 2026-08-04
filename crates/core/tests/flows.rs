@@ -346,7 +346,10 @@ patterns:
         "a Luhn-failing value must be left exactly as it was: {out}"
     );
     assert!(
-        report.warnings.iter().any(|w| w.contains("failed the") && w.contains("checksum")),
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("rejected") && w.contains("validation")),
         "rejections must be surfaced: {:?}",
         report.warnings
     );

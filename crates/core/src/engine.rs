@@ -201,12 +201,12 @@ impl Patterns {
             }
             if self.rejected[i] > 0 {
                 warnings.push(format!(
-                    "pattern '{}' rejected {} match(es) that had the right shape but failed the \
-                     {:?} checksum, and left them unchanged. Set validate: none to treat them as \
+                    "pattern '{}' rejected {} match(es) that had the right shape but failed \
+                     {} validation, and left them unchanged. Set validate: none to treat them as \
                      identifiers anyway (at the cost of false positives)",
                     rule.name,
                     self.rejected[i],
-                    rule.validator()
+                    rule.validator().label()
                 ));
             }
             if rule_total > 0

@@ -46,19 +46,38 @@ impl Precision {
     }
 }
 
-/// Post-match checksum validation, used to suppress false positives.
+/// Post-match validation, used to suppress false positives.
+///
+/// A validator must be **conservative**: it may only reject what is definitely
+/// not the thing it checks. Over-strict validation produces false *negatives* —
+/// a real identifier silently passing through — which is far worse than a false
+/// positive a human can dismiss. Every rejection is counted and reported, so an
+/// over-strict validator is at least visible.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Validator {
     /// Accept every match.
     #[default]
     None,
-    /// Luhn (mod 10) — payment cards.
+    /// Luhn (mod 10) only.
     Luhn,
+    /// Luhn plus payment-card length and issuer-prefix plausibility.
+    CardBrand,
     /// ISO 7064 mod-97-10 — IBANs.
     IbanMod97,
     /// US Social Security Number allocation rules.
     SsnUs,
+    /// Parse as an actual IP address (`std::net::IpAddr`), which is exact where
+    /// a regex can only approximate.
+    IpAddress,
+    /// A real calendar date: rejects `31/02/1990` and `2024-13-45`.
+    CalendarDate,
+    /// RFC-shaped email syntax: single `@`, length limits, alphabetic TLD.
+    EmailSyntax,
+    /// URL syntax: known scheme, plausible host, no whitespace.
+    UrlSyntax,
+    /// E.164 limits: 7–15 digits and no leading zero in the country code.
+    PhoneE164,
 }
 
 impl Validator {
@@ -67,10 +86,193 @@ impl Validator {
         match self {
             Validator::None => true,
             Validator::Luhn => crate::mock::luhn_valid(matched),
+            Validator::CardBrand => card_brand_valid(matched),
             Validator::IbanMod97 => crate::mock::iban_valid(matched),
             Validator::SsnUs => ssn_us_valid(matched),
+            Validator::IpAddress => matched.parse::<std::net::IpAddr>().is_ok(),
+            Validator::CalendarDate => calendar_date_valid(matched),
+            Validator::EmailSyntax => email_syntax_valid(matched),
+            Validator::UrlSyntax => url_syntax_valid(matched),
+            Validator::PhoneE164 => phone_e164_valid(matched),
         }
     }
+
+    /// Short name used in the "rejected N matches" warning.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Validator::None => "none",
+            Validator::Luhn => "Luhn",
+            Validator::CardBrand => "Luhn + card length/prefix",
+            Validator::IbanMod97 => "IBAN mod-97",
+            Validator::SsnUs => "SSN allocation rules",
+            Validator::IpAddress => "IP address parse",
+            Validator::CalendarDate => "calendar date",
+            Validator::EmailSyntax => "email syntax",
+            Validator::UrlSyntax => "URL syntax",
+            Validator::PhoneE164 => "E.164 limits",
+        }
+    }
+}
+
+/// Luhn, plus the length and issuer prefix a payment card actually has.
+///
+/// Luhn alone accepts roughly one in ten arbitrary digit strings, so a long
+/// order or case number frequently passes it. Requiring a real card length
+/// (13–19) and a major-industry leading digit of 2–6 removes most of that.
+///
+/// The trade-off is explicit: a card from an issuer outside that range would be
+/// missed. Every major scheme falls inside it (Visa 4, Mastercard 2/5, Amex 3,
+/// Discover/UnionPay 6, JCB/Diners 3), and the rejection is reported either way.
+fn card_brand_valid(matched: &str) -> bool {
+    let digits: Vec<u8> = matched.bytes().filter(u8::is_ascii_digit).collect();
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+    if !(b'2'..=b'6').contains(&digits[0]) {
+        return false;
+    }
+    // A run of one repeated digit is a placeholder, not a card, even when it
+    // happens to satisfy Luhn.
+    if digits.iter().all(|d| *d == digits[0]) {
+        return false;
+    }
+    crate::mock::luhn_valid(matched)
+}
+
+/// Days in a month, honouring the Gregorian leap rule.
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+/// Whether a matched date string denotes a real calendar date.
+///
+/// Ambiguous numeric forms are accepted if **either** day/month reading is valid,
+/// because `03/04/1990` is a real date under both conventions and guessing wrong
+/// would reject a genuine identifier. Deliberately says nothing about whether the
+/// date is a plausible *birth* date: this detector matches dates generally, and
+/// rejecting a future date would drop appointment dates a user wants removed.
+fn calendar_date_valid(matched: &str) -> bool {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let lower = matched.to_ascii_lowercase();
+
+    // Month-name form: find the month, then the two numbers around it.
+    if let Some(month) = MONTHS.iter().position(|m| lower.contains(m)) {
+        let numbers: Vec<i64> = lower
+            .split(|c: char| !c.is_ascii_digit())
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse().ok())
+            .collect();
+        let (day, year) = match numbers.as_slice() {
+            [a, b] if *a > 31 => (*b, *a),
+            [a, b] => (*a, *b),
+            _ => return false,
+        };
+        return (1..=days_in_month(year, month as u32 + 1) as i64).contains(&day);
+    }
+
+    let numbers: Vec<i64> = matched
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let [a, b, c] = numbers.as_slice() else {
+        return false;
+    };
+    let valid = |year: i64, month: i64, day: i64| {
+        (1..=12).contains(&month)
+            && (1..=days_in_month(year, month as u32) as i64).contains(&day)
+    };
+    if *a > 31 {
+        // Year first: YYYY-MM-DD.
+        valid(*a, *b, *c)
+    } else {
+        // Ambiguous: accept either reading.
+        valid(*c, *b, *a) || valid(*c, *a, *b)
+    }
+}
+
+/// Structural email validation: one `@`, RFC 5321 length limits, a dotted domain
+/// and an alphabetic top-level label.
+fn email_syntax_valid(matched: &str) -> bool {
+    if matched.len() > 254 {
+        return false;
+    }
+    let Some((local, domain)) = matched.split_once('@') else {
+        return false;
+    };
+    if domain.contains('@') || local.is_empty() || local.len() > 64 {
+        return false;
+    }
+    if local.starts_with('.') || local.ends_with('.') || local.contains("..") {
+        return false;
+    }
+    if domain.is_empty() || domain.len() > 255 || domain.contains("..") {
+        return false;
+    }
+    let labels: Vec<&str> = domain.split('.').collect();
+    if labels.len() < 2 || labels.iter().any(|l| l.is_empty()) {
+        return false;
+    }
+    let tld = labels.last().expect("checked non-empty");
+    tld.len() >= 2 && tld.bytes().all(|b| b.is_ascii_alphabetic())
+}
+
+/// Structural URL validation: a known scheme (or a `www.` host), a plausible
+/// host, and no whitespace.
+fn url_syntax_valid(matched: &str) -> bool {
+    if matched.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let rest = ["http://", "https://", "ftp://", "ftps://"]
+        .iter()
+        .find_map(|scheme| matched.strip_prefix(*scheme))
+        .or_else(|| matched.strip_prefix("www.").map(|_| matched))
+        ;
+    let Some(rest) = rest else {
+        return false;
+    };
+    let host = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or("")
+        .trim_start_matches("www.");
+    let host = host.split('@').next_back().unwrap_or(host);
+    let host = host.split(':').next().unwrap_or(host);
+    if host.is_empty() {
+        return false;
+    }
+    host == "localhost"
+        || host.parse::<std::net::IpAddr>().is_ok()
+        || (host.contains('.')
+            && !host.starts_with('.')
+            && !host.ends_with('.')
+            && !host.contains("..")
+            && host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-'))
+}
+
+/// E.164 limits: at most 15 digits, at least 7, and no country code beginning
+/// with zero. Conservative on purpose — national dialling conventions vary far
+/// too much to validate a number's *body*.
+fn phone_e164_valid(matched: &str) -> bool {
+    let digits: Vec<u8> = matched.bytes().filter(u8::is_ascii_digit).collect();
+    if !(7..=15).contains(&digits.len()) {
+        return false;
+    }
+    // No country calling code starts with 0, so `+0…` is never a real number.
+    if matched.trim_start().starts_with('+') && digits.first() == Some(&b'0') {
+        return false;
+    }
+    true
 }
 
 /// US SSN allocation rules: area 000, 666 and 900–999 are never issued, the
@@ -200,10 +402,26 @@ impl BuiltinPattern {
     /// Checksum validation applied to every match of this detector.
     pub fn validator(&self) -> Validator {
         match self {
-            BuiltinPattern::CreditCard => Validator::Luhn,
+            BuiltinPattern::CreditCard => Validator::CardBrand,
             BuiltinPattern::Iban => Validator::IbanMod97,
             BuiltinPattern::Ssn => Validator::SsnUs,
-            _ => Validator::None,
+            BuiltinPattern::IpAddress => Validator::IpAddress,
+            BuiltinPattern::DateOfBirth => Validator::CalendarDate,
+            BuiltinPattern::Email => Validator::EmailSyntax,
+            BuiltinPattern::Url => Validator::UrlSyntax,
+            BuiltinPattern::Phone => Validator::PhoneE164,
+            // No checksum or structural rule exists for these: a passport number
+            // and a licence plate carry no check digit, an API key is opaque, and
+            // the heuristics are heuristics. Claiming verification here would be
+            // dishonest.
+            BuiltinPattern::ApiKey
+            | BuiltinPattern::Ifsc
+            | BuiltinPattern::Passport
+            | BuiltinPattern::LicensePlate
+            | BuiltinPattern::PersonName
+            | BuiltinPattern::Address
+            | BuiltinPattern::Organization
+            | BuiltinPattern::MedicalTerm => Validator::None,
         }
     }
 
@@ -601,10 +819,163 @@ mod tests {
     }
 
     #[test]
-    fn precise_detectors_are_the_checksum_verified_ones() {
+    fn detectors_are_wired_to_the_right_validator() {
         assert_eq!(BuiltinPattern::Iban.validator(), Validator::IbanMod97);
-        assert_eq!(BuiltinPattern::CreditCard.validator(), Validator::Luhn);
+        assert_eq!(BuiltinPattern::CreditCard.validator(), Validator::CardBrand);
         assert_eq!(BuiltinPattern::Ssn.validator(), Validator::SsnUs);
-        assert_eq!(BuiltinPattern::Email.validator(), Validator::None);
+        assert_eq!(BuiltinPattern::Email.validator(), Validator::EmailSyntax);
+        assert_eq!(BuiltinPattern::IpAddress.validator(), Validator::IpAddress);
+        assert_eq!(BuiltinPattern::DateOfBirth.validator(), Validator::CalendarDate);
+        // Opaque or checksum-free values must NOT claim verification.
+        for unverifiable in [
+            BuiltinPattern::ApiKey,
+            BuiltinPattern::Passport,
+            BuiltinPattern::LicensePlate,
+            BuiltinPattern::PersonName,
+        ] {
+            assert_eq!(unverifiable.validator(), Validator::None);
+        }
+    }
+}
+
+#[cfg(test)]
+mod validator_tests {
+    use super::*;
+
+    /// Each validator must accept real values and reject specific fakes. Both
+    /// directions matter: an over-strict validator produces false negatives,
+    /// which is the worse failure.
+    #[test]
+    fn ip_validation_is_exact_where_a_regex_can_only_approximate() {
+        let v = Validator::IpAddress;
+        for good in ["192.168.1.1", "2001:db8::1", "::1", "8.8.8.8"] {
+            assert!(v.accepts(good), "rejected real address {good}");
+        }
+        for bad in ["1:2:3:4:5:6:7:8:9", "2001:db8:::1", "12:30", "256.1.1.1"] {
+            assert!(!v.accepts(bad), "accepted non-address {bad}");
+        }
+    }
+
+    #[test]
+    fn calendar_dates_reject_impossible_days_and_months() {
+        let v = Validator::CalendarDate;
+        for good in [
+            "15/03/1990",
+            "03/15/1990",   // the other convention
+            "1990-03-15",
+            "29/02/2000",   // leap year
+            "March 15, 1990",
+            "15 March 1990",
+        ] {
+            assert!(v.accepts(good), "rejected real date {good}");
+        }
+        for bad in [
+            "31/02/1990",   // February has no 31st
+            "2024-13-45",
+            "45/45/1990",
+            "31 February 1990",
+            "29/02/1900",   // 1900 is not a leap year
+        ] {
+            assert!(!v.accepts(bad), "accepted impossible date {bad}");
+        }
+    }
+
+    #[test]
+    fn card_validation_goes_beyond_luhn() {
+        let v = Validator::CardBrand;
+        for good in ["4111 1111 1111 1111", "3782 822463 10005", "5555555555554444"] {
+            assert!(v.accepts(good), "rejected real card {good}");
+        }
+        // These DO satisfy Luhn but are not payment cards: the leading digit is
+        // outside the major-industry range 2-6. Plain Luhn accepts them, which is
+        // exactly the false-positive source the upgrade removes.
+        for luhn_but_not_a_card in ["1234567890128", "9123456789012348"] {
+            assert!(
+                Validator::Luhn.accepts(luhn_but_not_a_card),
+                "test premise: {luhn_but_not_a_card} must satisfy Luhn"
+            );
+            assert!(
+                !v.accepts(luhn_but_not_a_card),
+                "{luhn_but_not_a_card} passes Luhn but is not card-shaped"
+            );
+        }
+        assert!(!v.accepts("18"), "too short");
+        assert!(
+            !v.accepts("0000000000000000"),
+            "a run of one digit is a placeholder"
+        );
+    }
+
+    #[test]
+    fn email_syntax_enforces_rfc_limits() {
+        let v = Validator::EmailSyntax;
+        for good in ["user@example.com", "a.b+c@sub.example.co.uk", "müller@example.de"] {
+            assert!(v.accepts(good), "rejected real address {good}");
+        }
+        for bad in [
+            "user@@example.com",
+            "user@example",          // no dot in the domain
+            "user@example.c",        // one-character TLD
+            "user@example.12",       // numeric TLD
+            ".user@example.com",
+            "us..er@example.com",
+            "user@exa..mple.com",
+        ] {
+            assert!(!v.accepts(bad), "accepted malformed address {bad}");
+        }
+    }
+
+    #[test]
+    fn url_syntax_requires_a_scheme_and_plausible_host() {
+        let v = Validator::UrlSyntax;
+        for good in [
+            "https://internal.company.com",
+            "http://localhost:8080/x",
+            "https://192.168.1.1/admin",
+            "www.example.com/path",
+        ] {
+            assert!(v.accepts(good), "rejected real URL {good}");
+        }
+        for bad in ["https://", "http://.example.com", "https://exa mple.com"] {
+            assert!(!v.accepts(bad), "accepted malformed URL {bad}");
+        }
+    }
+
+    #[test]
+    fn phone_validation_applies_e164_limits() {
+        let v = Validator::PhoneE164;
+        for good in ["+1-555-0123", "+91 98765 43210", "+49 89 5551234", "089 5551234"] {
+            assert!(v.accepts(good), "rejected real number {good}");
+        }
+        // 16+ digits exceeds E.164; a country code never starts with zero.
+        assert!(!v.accepts("+1234567890123456"), "too many digits");
+        assert!(!v.accepts("+0123456789"), "country code cannot start with 0");
+        assert!(!v.accepts("12345"), "too few digits");
+    }
+
+    /// The catalog must stay honest: a detector claims verification only when a
+    /// validator actually runs for it.
+    #[test]
+    fn verified_detectors_are_exactly_those_with_a_validator() {
+        let verified: Vec<&str> = ALL
+            .iter()
+            .filter(|b| b.validator() != Validator::None)
+            .map(|b| b.name())
+            .collect();
+        assert_eq!(
+            verified,
+            vec![
+                "email",
+                "iban",
+                "credit_card",
+                "ip_address",
+                "url",
+                "ssn",
+                "date_of_birth",
+                "phone",
+            ],
+            "eight of sixteen detectors are validated; the rest have no checksum \
+             or structural rule and must not claim one"
+        );
     }
 }
