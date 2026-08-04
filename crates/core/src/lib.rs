@@ -8,6 +8,7 @@
 //! Terminology guardrails: anonymization here is *risk-assessed*, never
 //! guaranteed; pseudonymized data remains personal data.
 
+pub mod detect;
 pub mod engine;
 pub mod error;
 pub mod format;
@@ -24,6 +25,7 @@ pub mod vault;
 
 pub use engine::{run_csv_job, run_job};
 pub use error::CoreError;
+pub use detect::{BuiltinPattern, Precision, Validator};
 pub use format::Format;
 pub use lint::{Lint, LintLevel, lint};
 pub use policy::Policy;

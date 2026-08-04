@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use assert_cmd::Command;
-use deident_core::policy::BuiltinPattern;
+use deident_core::detect::BuiltinPattern;
 use deident_types::{ChainReport, JobOutcome, RiskReport};
 use regex::Regex;
 
@@ -187,7 +187,10 @@ fn expected_patterns(input_notes: &[String]) -> ExpectedPatterns {
         surviving_phones: Vec::new(),
     };
     for note in input_notes.iter().filter(|n| !n.is_empty()) {
-        expected.ibans += iban.find_iter(note).count() as u64;
+        expected.ibans += iban
+            .find_iter(note)
+            .filter(|m| BuiltinPattern::Iban.validator().accepts(m.as_str()))
+            .count() as u64;
         let after_iban = iban.replace_all(note, "[IBAN]");
         expected.phones += phone.find_iter(&after_iban).count() as u64;
         expected.emails += email.find_iter(&after_iban).count() as u64;
@@ -199,6 +202,20 @@ fn expected_patterns(input_notes: &[String]) -> ExpectedPatterns {
             .extend(phone.find_iter(&after_email).map(|m| m.as_str().to_string()));
     }
     expected
+}
+
+/// Count matches the way the engine does: shape **and** checksum.
+///
+/// A raw regex scan would report false positives — a 32-character hex token can
+/// begin with two letters and two digits and so matches the IBAN shape, and only
+/// the mod-97 check distinguishes it from a real IBAN.
+fn validated_matches(builtin: BuiltinPattern, text: &str) -> usize {
+    let regex = Regex::new(builtin.regex_source()).unwrap();
+    let validator = builtin.validator();
+    regex
+        .find_iter(text)
+        .filter(|m| validator.accepts(m.as_str()))
+        .count()
 }
 
 fn pattern_total(report: &RiskReport, pattern: &str) -> u64 {
@@ -218,10 +235,16 @@ fn assert_patients_invariants(mode: &str, output: &str, ctx: &str) {
     assert_eq!(out_rows.len(), in_rows.len(), "{ctx}: row count must be preserved");
 
     // No IBAN and no email may survive anywhere (redacted/tokenized).
-    let iban = Regex::new(BuiltinPattern::Iban.regex_source()).unwrap();
-    let email = Regex::new(BuiltinPattern::Email.regex_source()).unwrap();
-    assert_eq!(iban.find_iter(output).count(), 0, "{ctx}: IBAN survived");
-    assert_eq!(email.find_iter(output).count(), 0, "{ctx}: email survived");
+    assert_eq!(
+        validated_matches(BuiltinPattern::Iban, output),
+        0,
+        "{ctx}: IBAN survived"
+    );
+    assert_eq!(
+        validated_matches(BuiltinPattern::Email, output),
+        0,
+        "{ctx}: email survived"
+    );
 
     match mode {
         "pseudonymize" => {

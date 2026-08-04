@@ -39,9 +39,12 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
   remove, redact, bucket, truncate dates, keep a prefix. See
   [Policy reference](#policy-reference).
 - **Content patterns** — find identifiers *inside* values (an IBAN in a
-  free-text note) by regex or built-in pattern, then detect, redact, tokenize
-  or replace them with structurally valid fakes. See
-  [Content-pattern rules](#content-pattern-rules).
+  free-text note) with **16 built-in detectors** (email, IBAN, card, SSN, phone,
+  IP, URL, API key, passport, plate, IFSC, date of birth, plus heuristic name /
+  address / organization / medical-term matchers) or your own regex, then detect,
+  redact, tokenize or replace them with structurally valid fakes —
+  checksum-verified where a checksum exists. See
+  [Built-in detectors](#built-in-detectors).
 - **Chained datasets** — process several files as one export with shared token
   scoping, so foreign keys still join after pseudonymization. See
   [Chained datasets](#chained-datasets).
@@ -370,10 +373,79 @@ custom `regex:` rule. A mock is a **pseudonym with a prettier shape**, not
 anonymization: it is recorded in the mapping vault exactly like a token, and
 anyone with the key can recompute it.
 
-Built-in patterns (`builtin:`): `iban`, `email`, `phone`, `credit_card`. These
-are pragmatic heuristics, not validators — expect some false positives/negatives
-and switch to a custom `regex` where precision matters. Dropped and tokenized
-columns are never scanned (nothing left to find).
+Dropped and tokenized columns are never scanned (nothing left to find).
+
+### Built-in detectors
+
+Sixteen detectors, grouped by **how much a match can be trusted**. That grouping
+is the important part: it stops a heuristic guess from being mistaken for a
+verified identifier.
+
+| Detector | Example | Class | Verified by |
+|---|---|---|---|
+| `email` | `user@example.com` | precise | — |
+| `iban` | `DE89 3704 0044 0532 0130 00` | precise | mod-97 (ISO 7064) |
+| `credit_card` | `4111 1111 1111 1111` | precise | Luhn |
+| `ip_address` | `192.168.1.1`, `2001:db8::1` | precise | octet ranges |
+| `url` | `https://internal.company.com` | precise | — |
+| `api_key` | `AKIA…`, `sk-live_…`, `ghp_…`, `xoxb-…`, `glpat-…` | precise | — |
+| `ifsc` | `HDFC0001234 000123456789` | precise | — |
+| `phone` | `+1-555-0123`, `+91 98765 43210` | moderate | — |
+| `ssn` | `123-45-6789` | moderate | US allocation rules |
+| `date_of_birth` | `15/03/1990`, `March 15, 1990` | moderate | — |
+| `passport` | `J1234567` | moderate | — |
+| `license_plate` | `MH 12 AB 1234` | moderate | — |
+| `person_name` | `Dr. Priya Sharma`, `John Smith` | **heuristic** | — |
+| `address` | `123 MG Road, Pune 411001` | **heuristic** | — |
+| `organization` | `Apollo Hospital`, `HDFC Bank` | **heuristic** | — |
+| `medical_term` | `diabetes`, `cardiac arrest` | **heuristic** | — |
+
+- **precise** — distinctive syntax, mostly checksum-verified. Safe to redact
+  unattended.
+- **moderate** — a recognisable shape that innocent data also has. Expect some
+  false positives; read the report.
+- **heuristic** — a stand-in for named entity recognition, which this tool does
+  **not** have. These are title-based patterns, suffix lists and a small
+  gazetteer. They produce false positives *and* miss real entities. They default
+  to `detect` in presets, every report says so, and setting one to modify data
+  triggers the `heuristic-pattern-modifies-data` lint. Treat them as "show me
+  where to look", never as "this text is now clean".
+
+#### Checksum validation
+
+Detectors with a checksum apply it to **every match**, so a loose regex buys
+recall without paying for it in false positives — a 13-digit order number matches
+the card shape but fails Luhn, so it is not reported as a card.
+
+Rejected matches are **left untouched and counted**, and the report says so:
+
+> `pattern 'credit_card' rejected 1 match(es) that had the right shape but failed
+> the Luhn checksum, and left them unchanged. Set validate: none to treat them as
+> identifiers anyway (at the cost of false positives)`
+
+That matters for test data: invented card numbers usually fail Luhn, so
+`validate: none` is the right choice when you want every card-shaped string
+flagged regardless.
+
+#### Presets
+
+Rather than listing sixteen rules, enable a whole class:
+
+```yaml
+presets:
+  - { preset: precise,   action: redact }   # checksum-verified: act on them
+  - { preset: moderate,  action: redact }   # read the report afterwards
+  - { preset: heuristic, action: detect }   # report only, for human review
+```
+
+`preset: all` covers everything. An explicit `patterns` entry always wins over a
+preset of the same detector name, so you can enable a class and still tune one
+member of it. A complete example ships in
+[examples/policies/detect-all.yaml](examples/policies/detect-all.yaml).
+
+Rules run in sequence over the same value, so two rules using the same detector
+would mean the first one's replacement hides the second's matches — the
+`duplicate-builtin-detector` lint catches that.
 
 ## Key management
 
