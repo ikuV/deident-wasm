@@ -231,7 +231,22 @@ impl Engine for WasmEngine {
             timeout_ms = self.limits.timeout.as_millis() as u64,
             "running job in sandbox"
         );
-        let workspace = self.jobs_root.join(format!("job-{}", request.job_id));
+        let workspace = self.jobs_root.join(workspace_name(&request.job_id));
+        // Defence in depth: the workspace is created and later *recursively
+        // deleted*, so refuse to act on anything that is not a direct child of
+        // the jobs root, whatever the job id contained.
+        if workspace.parent() != Some(self.jobs_root.as_path()) {
+            return Ok(JobResponse {
+                job_id: request.job_id.clone(),
+                outcome: JobOutcome::Failed {
+                    error: format!(
+                        "refusing to use job workspace '{}': not a direct child of '{}'",
+                        workspace.display(),
+                        self.jobs_root.display()
+                    ),
+                },
+            });
+        }
         let result = self.run_in_fresh_workspace(request, &workspace);
         if let Err(err) = std::fs::remove_dir_all(&workspace)
             && workspace.exists()
@@ -329,6 +344,18 @@ impl WasmEngine {
     }
 }
 
+/// Directory name for a job's workspace.
+///
+/// Job ids are caller-supplied (a chain manifest builds them from
+/// author-controlled names), and this name is interpolated into a path that is
+/// later passed to `remove_dir_all`. Hashing rather than interpolating means no
+/// input can introduce a path separator, a `..` component, or any other
+/// surprise — while staying deterministic, which keeps workspaces greppable
+/// against a job id.
+fn workspace_name(job_id: &str) -> String {
+    format!("job-{}", &blake3::hash(job_id.as_bytes()).to_hex()[..24])
+}
+
 /// Lowercase file extension of a path, defaulting to `csv` when absent so a
 /// staged file still carries a format the guest can infer.
 fn extension_of(path: &str) -> String {
@@ -349,6 +376,33 @@ mod tests {
         assert_eq!(extension_of("in.jsonl"), "jsonl");
         assert_eq!(extension_of("in.parquet"), "parquet");
         assert_eq!(extension_of("noext"), "csv");
+    }
+
+    /// A job id can come from a chain manifest, i.e. from author-controlled
+    /// YAML. It must never be able to steer the workspace path, which is
+    /// later handed to `remove_dir_all`.
+    #[test]
+    fn workspace_name_neutralizes_path_traversal() {
+        for hostile in [
+            "../../../../etc",
+            "export:../../Documents",
+            "a/b/c",
+            "..",
+            "",
+        ] {
+            let name = workspace_name(hostile);
+            assert!(name.starts_with("job-"), "{name}");
+            assert_eq!(
+                std::path::Path::new(&name).components().count(),
+                1,
+                "workspace name must be a single path component: {name}"
+            );
+            assert!(!name.contains(".."), "{name}");
+            assert!(!name.contains('/') && !name.contains('\\'), "{name}");
+        }
+        // Deterministic, and distinct per job id.
+        assert_eq!(workspace_name("a"), workspace_name("a"));
+        assert_ne!(workspace_name("a"), workspace_name("b"));
     }
 
     #[test]

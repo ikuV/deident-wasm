@@ -461,12 +461,21 @@ fn run_vault(args: &VaultArgs) -> anyhow::Result<ExitCode> {
 
 fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
     let entries = load_vault(&args.vault, &args.policy)?;
-    // token -> original. Tokens are unique per value, so collisions across
-    // domains would mean a hash collision; last write wins either way.
-    let lookup: std::collections::HashMap<&str, &str> = entries
-        .iter()
-        .map(|e| (e.token.as_str(), e.original.as_str()))
-        .collect();
+    // Column tokens replaced a whole cell, but pattern tokens and mocks were
+    // substituted *inside* a value (an IBAN within a free-text note), so they
+    // have to be reversed as substrings.
+    let mut whole_cell: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    let mut embedded: Vec<(&str, &str)> = Vec::new();
+    for entry in &entries {
+        if entry.field.starts_with("pattern:") {
+            embedded.push((entry.token.as_str(), entry.original.as_str()));
+        } else {
+            whole_cell.insert(entry.token.as_str(), entry.original.as_str());
+        }
+    }
+    // Longest first, so a short replacement cannot clobber part of a longer
+    // token that contains it.
+    embedded.sort_by_key(|(token, _)| std::cmp::Reverse(token.len()));
 
     let input_format = deident_core::Format::for_path(&path_to_string(&args.input)?)?;
     let output_format = deident_core::Format::for_path(&path_to_string(&args.out)?)?;
@@ -489,12 +498,20 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
     while let Some(row) = reader.next_row()? {
         let restored_row: Vec<String> = row
             .into_iter()
-            .map(|cell| match lookup.get(cell.as_str()) {
-                Some(original) => {
+            .map(|cell| {
+                if let Some(original) = whole_cell.get(cell.as_str()) {
                     restored += 1;
-                    (*original).to_string()
+                    return (*original).to_string();
                 }
-                None => cell,
+                let mut value = cell;
+                for (token, original) in &embedded {
+                    let hits = value.matches(token).count();
+                    if hits > 0 {
+                        value = value.replace(token, original);
+                        restored += hits as u64;
+                    }
+                }
+                value
             })
             .collect();
         writer.write_row(&restored_row)?;

@@ -165,3 +165,45 @@ jobs:
     let v1_ref = visits.lines().nth(1).unwrap().split(',').nth(1).unwrap();
     assert_eq!(p001_token, v1_ref);
 }
+
+/// A chain manifest is a shareable config artifact, so hostile names must be
+/// rejected at load time — they used to reach a path that is `remove_dir_all`ed.
+#[test]
+fn rejects_hostile_manifest_and_job_names() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_fixture(tmp.path());
+    let manifest = tmp.path().join("chain.yaml");
+
+    let cases = [
+        ("../../../../Users/someone/Documents", "job name traversal"),
+        ("a/b", "job name separator"),
+        ("", "empty job name"),
+    ];
+    for (name, what) in cases {
+        std::fs::write(
+            &manifest,
+            format!(
+                "version: 1\nname: ok\njobs:\n  - name: \"{name}\"\n    \
+                 input: patients.csv\n    policy: patients.yaml\n    output: out/p.csv\n"
+            ),
+        )
+        .unwrap();
+        let err = run_chain(&manifest, Mode::Anonymize, &NativeEngine)
+            .expect_err(&format!("{what} must be rejected"));
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("chain job name"),
+            "{what}: unexpected error: {message}"
+        );
+    }
+
+    // The chain-level name is validated the same way.
+    std::fs::write(
+        &manifest,
+        "version: 1\nname: \"../escape\"\njobs:\n  - name: p\n    \
+         input: patients.csv\n    policy: patients.yaml\n    output: out/p.csv\n",
+    )
+    .unwrap();
+    let err = run_chain(&manifest, Mode::Anonymize, &NativeEngine).unwrap_err();
+    assert!(format!("{err:#}").contains("chain name"));
+}

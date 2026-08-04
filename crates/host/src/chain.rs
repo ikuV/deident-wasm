@@ -70,8 +70,12 @@ impl ChainManifest {
             manifest.version
         );
         anyhow::ensure!(!manifest.jobs.is_empty(), "chain has no jobs");
+        // Names end up in job ids, logs and audit records, so keep them to a
+        // boring character set rather than sanitizing at every use site.
+        check_name("chain name", &manifest.name)?;
         let mut names = std::collections::HashSet::new();
         for job in &manifest.jobs {
+            check_name("chain job name", &job.name)?;
             anyhow::ensure!(
                 names.insert(job.name.as_str()),
                 "chain job '{}' is listed more than once",
@@ -80,6 +84,26 @@ impl ChainManifest {
         }
         Ok(manifest)
     }
+}
+
+/// Reject names that are empty, over-long, or contain anything but
+/// `[A-Za-z0-9._-]`. Path separators and `..` are the reason this exists.
+fn check_name(what: &str, name: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!name.is_empty(), "{what} must not be empty");
+    anyhow::ensure!(
+        name.len() <= 64,
+        "{what} '{name}' is too long (max 64 characters)"
+    );
+    if let Some(bad) = name
+        .chars()
+        .find(|c| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')))
+    {
+        anyhow::bail!(
+            "{what} '{name}' contains the disallowed character {bad:?}; \
+             use letters, digits, '.', '_' or '-'"
+        );
+    }
+    Ok(())
 }
 
 /// Run every job of the manifest at `manifest_path` sequentially through

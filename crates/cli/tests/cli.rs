@@ -213,3 +213,242 @@ fn missing_input_fails_with_nonzero_exit() {
         .failure()
         .stderr(predicate::str::contains("cannot open input"));
 }
+
+/// The vault → export → reverse workflow, including a pattern-inserted mock
+/// that lives *inside* a free-text value (whole-cell lookup alone misses it).
+#[test]
+fn vault_export_and_reverse_round_trip() {
+    let tmp = tempfile::tempdir().unwrap();
+    let policy = tmp.path().join("p.yaml");
+    std::fs::write(
+        &policy,
+        r#"
+version: 1
+dataset: vault-round-trip
+key: { inline: "cli-test-secret" }
+on_unlisted: error
+fields:
+  - name: patient_id
+    class: direct_identifier
+    pseudonymize: { prefix: "pid_" }
+  - name: notes
+    class: utility
+patterns:
+  - name: iban
+    builtin: iban
+    fields: [notes]
+    action: mock
+"#,
+    )
+    .unwrap();
+    let input = tmp.path().join("in.csv");
+    std::fs::write(
+        &input,
+        "patient_id,notes\nP001,refund to DE89370400440532013000\nP002,none\n",
+    )
+    .unwrap();
+    let out = tmp.path().join("out.csv");
+    let vault = tmp.path().join("v.jsonl");
+
+    deident()
+        .arg("pseudonymize")
+        .arg(&input)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(&out)
+        .arg("--vault")
+        .arg(&vault)
+        .arg("--engine")
+        .arg("native")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 match(es) mocked"))
+        .stdout(predicate::str::contains("re-identification material"));
+
+    let transformed = std::fs::read_to_string(&out).unwrap();
+    assert!(!transformed.contains("P001"), "id must be tokenized");
+    assert!(
+        !transformed.contains("DE89370400440532013000"),
+        "the original IBAN must not survive"
+    );
+    assert!(
+        transformed.contains("refund to DE"),
+        "the mock must keep the IBAN shape in place: {transformed}"
+    );
+
+    // The vault must not contain plaintext.
+    let vault_raw = std::fs::read_to_string(&vault).unwrap();
+    assert!(!vault_raw.contains("P001"));
+    assert!(!vault_raw.contains("DE89370400440532013000"));
+    assert!(vault_raw.contains("deident-vault"), "header stays readable");
+
+    // Export lists both the column token and the pattern mock.
+    deident()
+        .arg("vault")
+        .arg("export")
+        .arg(&vault)
+        .arg("--policy")
+        .arg(&policy)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("patient_id,pid_"))
+        .stdout(predicate::str::contains("pattern:iban,"));
+
+    // Reversal must restore the file exactly, embedded mock included.
+    let restored = tmp.path().join("back.csv");
+    deident()
+        .arg("reverse")
+        .arg(&out)
+        .arg("--vault")
+        .arg(&vault)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(&restored)
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(&restored).unwrap(),
+        std::fs::read_to_string(&input).unwrap(),
+        "reverse must reproduce the original byte for byte"
+    );
+}
+
+#[test]
+fn reverse_with_the_wrong_key_fails_loudly() {
+    let tmp = tempfile::tempdir().unwrap();
+    let write_policy = |path: &std::path::Path, secret: &str| {
+        std::fs::write(
+            path,
+            format!(
+                "version: 1\ndataset: wrong-key\nkey: {{ inline: \"{secret}\" }}\n\
+                 fields:\n  - {{ name: id, class: direct_identifier }}\n"
+            ),
+        )
+        .unwrap();
+    };
+    let good = tmp.path().join("good.yaml");
+    let bad = tmp.path().join("bad.yaml");
+    write_policy(&good, "right-secret");
+    write_policy(&bad, "wrong-secret");
+    let input = tmp.path().join("in.csv");
+    std::fs::write(&input, "id\nP001\n").unwrap();
+    let vault = tmp.path().join("v.jsonl");
+
+    deident()
+        .arg("pseudonymize")
+        .arg(&input)
+        .arg("--policy")
+        .arg(&good)
+        .arg("--out")
+        .arg(tmp.path().join("out.csv"))
+        .arg("--vault")
+        .arg(&vault)
+        .arg("--engine")
+        .arg("native")
+        .assert()
+        .success();
+
+    deident()
+        .arg("vault")
+        .arg("export")
+        .arg(&vault)
+        .arg("--policy")
+        .arg(&bad)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("wrong key"));
+}
+
+#[test]
+fn lint_reports_and_can_deny() {
+    let tmp = tempfile::tempdir().unwrap();
+    let policy = tmp.path().join("risky.yaml");
+    std::fs::write(
+        &policy,
+        "version: 1\ndataset: risky\nkey: { inline: \"s\" }\non_unlisted: keep\n\
+         fields:\n  - { name: id, class: direct_identifier }\n  - { name: zip, class: quasi_identifier }\n",
+    )
+    .unwrap();
+
+    deident()
+        .arg("lint")
+        .arg(&policy)
+        .arg("--mode")
+        .arg("anonymize")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("qi-without-strategy"))
+        .stdout(predicate::str::contains("unlisted-columns-kept"));
+
+    // --deny turns warnings into a non-zero exit.
+    deident().arg("lint").arg(&policy).arg("--deny").assert().failure();
+
+    // A job refuses to run under --deny-lints.
+    deident()
+        .arg("anonymize")
+        .arg(example("data/patients.csv"))
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(tmp.path().join("out.csv"))
+        .arg("--deny-lints")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--deny-lints"));
+}
+
+#[test]
+fn audit_log_records_metadata_only() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log = tmp.path().join("audit.jsonl");
+    for _ in 0..2 {
+        deident()
+            .arg("anonymize")
+            .arg(example("data/patients.csv"))
+            .arg("--policy")
+            .arg(example("policies/patients.yaml"))
+            .arg("--out")
+            .arg(tmp.path().join("out.csv"))
+            .arg("--engine")
+            .arg("native")
+            .arg("--audit-log")
+            .arg(&log)
+            .assert()
+            .success();
+    }
+    let raw = std::fs::read_to_string(&log).unwrap();
+    let lines: Vec<&str> = raw.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 2, "one append-only record per job");
+    let record: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(record["status"], "succeeded");
+    assert_eq!(record["mode"], "anonymize");
+    assert_eq!(record["rows_read"], 12);
+    assert!(record["policy_hash"].as_str().unwrap().len() == 32);
+    // Metadata only: no cell values from the dataset.
+    assert!(!raw.contains("Alice"), "audit log must not contain data");
+    assert!(!raw.contains("81549"));
+}
+
+#[test]
+fn converts_between_formats_while_transforming() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out.jsonl");
+    deident()
+        .arg("anonymize")
+        .arg(example("data/patients.csv"))
+        .arg("--policy")
+        .arg(example("policies/patients.yaml"))
+        .arg("--out")
+        .arg(&out)
+        .arg("--engine")
+        .arg("native")
+        .assert()
+        .success();
+    let raw = std::fs::read_to_string(&out).unwrap();
+    let first: serde_json::Value = serde_json::from_str(raw.lines().next().unwrap()).unwrap();
+    assert!(first.get("patient_id").is_none(), "identifier must be gone");
+    assert_eq!(first["age"], "30-39", "generalized values are strings");
+    assert!(!raw.contains("Alice"));
+}
