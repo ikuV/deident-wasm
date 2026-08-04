@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use dicom_core::header::HasLength;
+use dicom_core::header::{HasLength, VR};
 use dicom_core::value::{PrimitiveValue, Value};
 use dicom_core::{DataElement, Tag};
 use dicom_dictionary_std::tags;
@@ -268,8 +268,10 @@ fn deidentify_with_cache(
     };
 
     // Remember the SOP Instance UID so the file-meta group can be kept
-    // consistent with the dataset after remapping.
+    // consistent with the dataset after remapping, and how many UIDs the shared
+    // cache already held so this instance's own contribution can be counted.
     let original_sop_instance = string_of(&object, tags::SOP_INSTANCE_UID);
+    let uids_before = ctx.uid_cache.len();
     // FileDicomObject derefs to the dataset it wraps.
     process_object(&mut object, &mut ctx, 0)?;
 
@@ -280,11 +282,25 @@ fn deidentify_with_cache(
     // Take the replacement from the UID cache rather than re-reading the
     // dataset: DICOM pads odd-length UI values with NUL on write, so a value
     // read back is not necessarily byte-equal to what we generated.
+    // Read the value the dataset actually ends up with, whatever action produced
+    // it. Keying this off the UID cache only synced the header for
+    // `TagAction::Uid`, so `pseudonymize`, `replace` or `empty` on
+    // SOPInstanceUID left the ORIGINAL identifier in the file-meta group — the
+    // exact reintroduction this sync exists to prevent.
+    let final_sop_instance = string_of(&object, tags::SOP_INSTANCE_UID);
     if let Some(before) = &original_sop_instance
-        && let Some(after) = ctx.uid_cache.get(before)
+        && final_sop_instance.as_deref() != Some(before.as_str())
     {
+        let after = final_sop_instance.clone().unwrap_or_default();
+        if after.is_empty() {
+            ctx.warnings.push(
+                "SOPInstanceUID was emptied or removed; the file-meta group can no longer \
+                 identify the instance and some readers will reject the file"
+                    .to_string(),
+            );
+        }
         let meta = object.meta_mut();
-        meta.media_storage_sop_instance_uid = after.clone();
+        meta.media_storage_sop_instance_uid = after;
         // The replacement UID rarely has the same length as the original, and
         // the meta group carries its own byte length (0002,0000). Leaving that
         // stale writes a file whose header length disagrees with its contents,
@@ -339,11 +355,10 @@ fn deidentify_with_cache(
             source: Box::new(source),
         })?;
 
-    let uids_remapped = ctx
-        .findings
-        .values()
-        .filter(|f| f.action == "uid-remapped")
-        .count() as u64;
+    // Distinct UID *values* replaced by this instance, not distinct tags: one
+    // sequence can hold four different ReferencedSOPInstanceUIDs, and reporting
+    // "1" for it contradicts the field's own documentation.
+    let uids_remapped = ctx.uid_cache.len().saturating_sub(uids_before) as u64;
     Ok(DicomReport {
         tool_version: crate::VERSION.to_string(),
         dataset: policy.dataset.clone(),
@@ -419,7 +434,7 @@ fn process_object(
         let Some(action) = ctx.resolved.action_for(tag, vr).cloned() else {
             continue;
         };
-        match apply_action(&action, tag, element.value(), ctx)? {
+        match apply_action(&action, tag, vr, element.value(), ctx)? {
             Applied::Unchanged => {}
             Applied::Remove => {
                 record(ctx, tag, &action);
@@ -448,141 +463,193 @@ enum Applied {
     Value(PrimitiveValue),
 }
 
+/// Outcome of applying an action to ONE value of a (possibly multi-valued)
+/// attribute.
+enum AppliedValue {
+    Unchanged,
+    /// Drop this value from the attribute.
+    Drop,
+    Replaced(String),
+}
+
+/// VRs whose value multiplicity is always 1 and in which a backslash is literal
+/// text rather than a separator (PS3.5 §6.2). Splitting these would corrupt the
+/// content.
+fn is_single_value_vr(vr: VR) -> bool {
+    matches!(vr, VR::LT | VR::ST | VR::UT | VR::UR)
+}
+
+/// Apply an action to an attribute, **value by value**.
+///
+/// DICOM attributes are frequently multi-valued (`ID-1\ID-2\ID-3`). Treating the
+/// backslash-joined string as one scalar collapsed the attribute to a single
+/// value — so identifiers 2..n were destroyed rather than de-identified, the
+/// vault recorded an unreversible joined "original", `date_shift` left every
+/// value after the first as an original date, and the UID cache keyed on the
+/// joined string gave the same UID two different replacements in different files.
 fn apply_action(
     action: &TagAction,
     tag: Tag,
+    vr: VR,
     value: &Value<InMemDicomObject>,
     ctx: &mut Context,
 ) -> Result<Applied, DicomError> {
     let keyword = profile::keyword_of(tag);
-    let text = primitive_text(value);
 
-    let applied = match action {
-        TagAction::Keep => Applied::Unchanged,
-        TagAction::Remove => Applied::Remove,
+    // Actions that replace the whole attribute regardless of its values.
+    match action {
+        TagAction::Keep => return Ok(Applied::Unchanged),
+        TagAction::Remove => {
+            ctx.modified += 1;
+            return Ok(Applied::Remove);
+        }
         TagAction::Empty => {
-            if value.length() == dicom_core::Length(0) {
+            return Ok(if value.length() == dicom_core::Length(0) {
                 Applied::Unchanged
             } else {
+                ctx.modified += 1;
                 Applied::Value(PrimitiveValue::Empty)
-            }
+            });
         }
         TagAction::Replace { value: literal } => {
-            Applied::Value(PrimitiveValue::Str(literal.clone()))
+            ctx.modified += 1;
+            return Ok(Applied::Value(PrimitiveValue::Str(literal.clone())));
+        }
+        _ => {}
+    }
+
+    let Some(values) = primitive_values(value, vr) else {
+        return Ok(Applied::Unchanged);
+    };
+    if values.is_empty() || values.iter().all(String::is_empty) {
+        return Ok(Applied::Unchanged);
+    }
+
+    let mut out: Vec<String> = Vec::with_capacity(values.len());
+    let mut changed = false;
+    for original in &values {
+        if original.is_empty() {
+            out.push(String::new());
+            continue;
+        }
+        match apply_to_value(action, &keyword, original, ctx)? {
+            AppliedValue::Unchanged => out.push(original.clone()),
+            AppliedValue::Drop => changed = true,
+            AppliedValue::Replaced(new) => {
+                changed |= new != *original;
+                out.push(new);
+            }
+        }
+    }
+
+    if !changed {
+        return Ok(Applied::Unchanged);
+    }
+    ctx.modified += 1;
+    Ok(match out.len() {
+        0 => Applied::Remove,
+        1 => Applied::Value(PrimitiveValue::Str(out.remove(0))),
+        // Multi-valued attributes must stay multi-valued.
+        _ => Applied::Value(PrimitiveValue::Strs(out.into())),
+    })
+}
+
+/// Apply an action to a single value of an attribute.
+fn apply_to_value(
+    action: &TagAction,
+    keyword: &str,
+    original: &str,
+    ctx: &mut Context,
+) -> Result<AppliedValue, DicomError> {
+    Ok(match action {
+        // Handled at attribute level.
+        TagAction::Keep | TagAction::Remove | TagAction::Empty | TagAction::Replace { .. } => {
+            AppliedValue::Unchanged
         }
         TagAction::Pseudonymize {
             prefix,
             domain,
             mock,
         } => {
-            let Some(original) = text else {
-                return Ok(Applied::Unchanged);
-            };
-            if original.is_empty() {
-                return Ok(Applied::Unchanged);
-            }
             let key = ctx.dataset_key.as_ref().expect("key resolved");
-            let domain = domain.clone().unwrap_or_else(|| keyword.clone());
+            let domain = domain.clone().unwrap_or_else(|| keyword.to_string());
             let replacement = match mock {
-                Some(shape) => mock_value(*shape, key, &domain, &original),
-                None => deident_core::key::token(key, &domain, &original, prefix.as_deref()),
+                Some(shape) => mock_value(*shape, key, &domain, original),
+                None => deident_core::key::token(key, &domain, original, prefix.as_deref()),
             };
             ctx.vault
                 .record(MappingEntry {
                     field: format!("dicom:{domain}"),
-                    original: original.clone(),
+                    original: original.to_string(),
                     token: replacement.clone(),
                 })
                 .map_err(|e| DicomError::Transform(e.to_string()))?;
-            Applied::Value(PrimitiveValue::Str(replacement))
+            AppliedValue::Replaced(replacement)
         }
         TagAction::Uid => {
-            let Some(original) = text else {
-                return Ok(Applied::Unchanged);
-            };
-            if original.is_empty() {
-                return Ok(Applied::Unchanged);
-            }
             let key = ctx.dataset_key.as_ref().expect("key resolved");
-            // One cache for the whole run: the same original UID must always
-            // produce the same replacement, whichever attribute it appears in.
-            let replacement = match ctx.uid_cache.get(&original) {
+            // One cache for the whole run, keyed on the INDIVIDUAL UID: the same
+            // original must always map to the same replacement, whichever
+            // attribute or file it appears in.
+            let replacement = match ctx.uid_cache.get(original) {
                 Some(existing) => existing.clone(),
                 None => {
-                    let generated = uid::derive_uid(key, "dicom-uid", &original);
-                    ctx.uid_cache.insert(original.clone(), generated.clone());
+                    let generated = uid::derive_uid(key, "dicom-uid", original);
+                    ctx.uid_cache
+                        .insert(original.to_string(), generated.clone());
                     ctx.vault
                         .record(MappingEntry {
                             field: "dicom:uid".to_string(),
-                            original: original.clone(),
+                            original: original.to_string(),
                             token: generated.clone(),
                         })
                         .map_err(|e| DicomError::Transform(e.to_string()))?;
                     generated
                 }
             };
-            Applied::Value(PrimitiveValue::Str(replacement))
+            AppliedValue::Replaced(replacement)
         }
         TagAction::DateShift { max_days, domain } => {
-            let Some(original) = text else {
-                return Ok(Applied::Unchanged);
-            };
-            if original.is_empty() {
-                return Ok(Applied::Unchanged);
-            }
             let key = ctx.dataset_key.as_ref().expect("key resolved");
-            let domain = domain.clone().unwrap_or_else(|| keyword.clone());
-            match shift_date_text(&original, key, &domain, *max_days) {
-                Some(shifted) => Applied::Value(PrimitiveValue::Str(shifted)),
+            let domain = domain.clone().unwrap_or_else(|| keyword.to_string());
+            match shift_date_text(original, key, &domain, *max_days) {
+                Some(shifted) => AppliedValue::Replaced(shifted),
                 None => {
                     ctx.warnings.push(format!(
-                        "{keyword}: value could not be parsed as a DICOM date and was removed instead of shifted"
+                        "{keyword}: a value could not be parsed as a DICOM date and was dropped instead of shifted"
                     ));
-                    Applied::Remove
+                    AppliedValue::Drop
                 }
             }
         }
         TagAction::DateTruncate { granularity } => {
-            let Some(original) = text else {
-                return Ok(Applied::Unchanged);
-            };
-            match truncate_date_text(&original, *granularity) {
-                Some(truncated) => Applied::Value(PrimitiveValue::Str(truncated)),
-                None => Applied::Remove,
+            match truncate_date_text(original, *granularity) {
+                Some(truncated) => AppliedValue::Replaced(truncated),
+                None => AppliedValue::Drop,
             }
         }
         TagAction::CleanText => {
-            let Some(original) = text else {
-                return Ok(Applied::Unchanged);
-            };
-            if original.is_empty() {
-                return Ok(Applied::Unchanged);
-            }
             if ctx.patterns.is_empty() {
                 // No rules at all is the WORST case, not a reason to stay quiet:
                 // `profile: basic` marks ~12 free-text attributes `clean_text`,
                 // so a policy with no `patterns:` ships them all untouched.
-                ctx.text_unchanged.push(keyword.clone());
-                return Ok(Applied::Unchanged);
+                ctx.text_unchanged.push(keyword.to_string());
+                return Ok(AppliedValue::Unchanged);
             }
-            let cleaned = clean_text(&original, ctx, &keyword)?;
+            let cleaned = clean_text(original, ctx, keyword)?;
             if cleaned == original {
                 // No pattern matched, so the free text is in the output exactly
                 // as it arrived. That is correct for `clean_text` — it only
                 // removes what its patterns match — but silence would let a
                 // reader assume the field had been sanitized, when a name or
                 // identifier the patterns do not cover survives intact.
-                ctx.text_unchanged.push(keyword.clone());
-                Applied::Unchanged
+                ctx.text_unchanged.push(keyword.to_string());
+                AppliedValue::Unchanged
             } else {
-                Applied::Value(PrimitiveValue::Str(cleaned))
+                AppliedValue::Replaced(cleaned)
             }
         }
-    };
-    if !matches!(applied, Applied::Unchanged) {
-        ctx.modified += 1;
-    }
-    Ok(applied)
+    })
 }
 
 /// Run the policy's pattern rules over a text value.
@@ -863,12 +930,24 @@ fn normalize(raw: &str) -> String {
         .to_string()
 }
 
-/// Text of a primitive value, or `None` for non-textual values.
-fn primitive_text(value: &Value<InMemDicomObject>) -> Option<String> {
-    match value {
-        Value::Primitive(primitive) => Some(normalize(&primitive.to_str())),
-        _ => None,
+/// Individual values of a primitive attribute, or `None` for non-primitives.
+///
+/// For text VRs (`LT`/`ST`/`UT`/`UR`) a backslash is literal content rather than
+/// a separator, so those are returned as a single value.
+fn primitive_values(value: &Value<InMemDicomObject>, vr: VR) -> Option<Vec<String>> {
+    let Value::Primitive(primitive) = value else {
+        return None;
+    };
+    if is_single_value_vr(vr) {
+        return Some(vec![normalize(&primitive.to_str())]);
     }
+    Some(
+        primitive
+            .to_multi_str()
+            .iter()
+            .map(|v| normalize(v))
+            .collect(),
+    )
 }
 
 fn string_of(object: &DefaultDicomObject, tag: Tag) -> Option<String> {

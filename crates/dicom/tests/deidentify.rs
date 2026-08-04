@@ -39,6 +39,19 @@ fn value_of(path: &std::path::Path, tag: Tag) -> Option<String> {
         .map(|s| norm(&s))
 }
 
+/// Individual values of a (possibly multi-valued) attribute. DICOM separates
+/// values with a backslash.
+fn multi_values(path: &std::path::Path, tag: Tag) -> Vec<String> {
+    let object = dicom_object::open_file(path).expect("readable DICOM");
+    let raw = object
+        .element(tag)
+        .expect("attribute present")
+        .to_str()
+        .expect("string value")
+        .to_string();
+    raw.split('\\').map(norm).collect()
+}
+
 /// Every byte of the output file, for leak checks.
 fn raw_bytes(path: &std::path::Path) -> Vec<u8> {
     std::fs::read(path).unwrap()
@@ -498,4 +511,159 @@ patterns:
         "a clean_text field that matched nothing must be surfaced: {:?}",
         report.warnings
     );
+}
+
+/// DICOM attributes are frequently multi-valued (`ID-1\ID-2\ID-3`). Treating the
+/// joined string as one scalar collapsed the attribute, so values 2..n were
+/// destroyed rather than de-identified.
+///
+/// `OtherPatientIDs` is retired but still present in archived studies, and is a
+/// convenient multi-valued identifier to test with.
+#[allow(deprecated)]
+#[test]
+fn multi_valued_attributes_are_de_identified_value_by_value() {
+    let policy_yaml = r#"
+version: 1
+kind: dicom
+dataset: vm-test
+key: { inline: "vm-secret" }
+profile: basic
+tags:
+  - { tag: OtherPatientIDs, action: pseudonymize, domain: opid, prefix: "OP-" }
+  - { tag: CalibrationDate, action: date_shift, max_days: 3650, domain: patient }
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("in.dcm");
+    let output = tmp.path().join("out.dcm");
+    synthetic::write_instance(&input, &InstanceOptions::default()).unwrap();
+
+    deidentify_file(&input, &output, &policy(policy_yaml), &RunOptions::default()).unwrap();
+
+    // Multiplicity must survive, and no original value may remain.
+    let values = multi_values(&output, tags::OTHER_PATIENT_I_DS);
+    assert_eq!(values.len(), 3, "all three values must survive: {values:?}");
+    for original in ["OPID-1", "OPID-2", "OPID-3"] {
+        assert!(
+            !values.iter().any(|v| v == original),
+            "{original} survived de-identification: {values:?}"
+        );
+    }
+    assert_eq!(
+        values.iter().collect::<std::collections::HashSet<_>>().len(),
+        3,
+        "distinct inputs must give distinct pseudonyms: {values:?}"
+    );
+
+    // date_shift used to shift only the first value and leave the rest as
+    // original dates, while reporting the attribute as shifted.
+    let shifted = multi_values(&output, tags::CALIBRATION_DATE);
+    assert_eq!(shifted.len(), 3, "{shifted:?}");
+    for original in ["20240314", "20240415", "20240516"] {
+        assert!(
+            !shifted.iter().any(|v| v == original),
+            "original date {original} survived: {shifted:?}"
+        );
+    }
+    // One offset per subject, so the intervals between the values are preserved.
+    let day = |d: &str| -> i64 {
+        let (y, m, dd) = (
+            d[0..4].parse::<i64>().unwrap(),
+            d[4..6].parse::<i64>().unwrap(),
+            d[6..8].parse::<i64>().unwrap(),
+        );
+        let y2 = if m <= 2 { y - 1 } else { y };
+        let era = y2.div_euclid(400);
+        let yoe = y2 - era * 400;
+        let mp = (m + 9) % 12;
+        let doy = (153 * mp + 2) / 5 + dd - 1;
+        era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468
+    };
+    assert_eq!(day(&shifted[1]) - day(&shifted[0]), 32, "interval preserved");
+    assert_eq!(day(&shifted[2]) - day(&shifted[1]), 31, "interval preserved");
+
+    // No planted value may appear anywhere in the file.
+    let bytes = raw_bytes(&output);
+    for phi in ["OPID-1", "OPID-2", "OPID-3", "20240415", "20240516"] {
+        assert!(!contains(&bytes, phi), "{phi} survived in the file");
+    }
+}
+
+/// The same UID must map to the same replacement whichever attribute or file it
+/// appears in — including when it sits inside a multi-valued attribute.
+#[test]
+fn multi_valued_uids_remap_consistently_and_are_counted_individually() {
+    use dicom_core::{DataElement, VR, value::PrimitiveValue};
+
+    let policy_yaml = r#"
+version: 1
+kind: dicom
+dataset: vm-uid-test
+key: { inline: "vm-uid-secret" }
+profile: basic
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    let study = tmp.path().join("study");
+    let out = tmp.path().join("deid");
+    std::fs::create_dir_all(&study).unwrap();
+
+    // a.dcm references two UIDs in one attribute; b.dcm references the first
+    // one alone. The shared UID must get the same replacement in both.
+    for (name, referenced) in [("a.dcm", "1.2.9.1\\1.2.9.2"), ("b.dcm", "1.2.9.1")] {
+        let mut object = synthetic::instance(&InstanceOptions {
+            sop_instance_uid: format!("1.2.3.{name}").replace(".dcm", ""),
+            ..Default::default()
+        });
+        object.put(DataElement::new(
+            tags::REFERENCED_SOP_INSTANCE_UID,
+            VR::UI,
+            PrimitiveValue::from(referenced),
+        ));
+        object.write_to_file(study.join(name)).unwrap();
+    }
+
+    let report =
+        deidentify_directory(&study, &out, &policy(policy_yaml), &RunOptions::default()).unwrap();
+    assert_eq!(report.instances_written, 2);
+
+    let referenced_of =
+        |name: &str| multi_values(&out.join(name), tags::REFERENCED_SOP_INSTANCE_UID);
+    let a = referenced_of("a.dcm");
+    let b = referenced_of("b.dcm");
+    assert_eq!(a.len(), 2, "both references must survive: {a:?}");
+    assert_eq!(b.len(), 1);
+    assert_eq!(
+        a[0], b[0],
+        "the same original UID must get the same replacement across files"
+    );
+    assert_ne!(a[0], a[1], "different UIDs must not collide");
+    for uid in a.iter().chain(&b) {
+        assert!(deident_dicom::uid::is_valid_uid(uid), "invalid UID: {uid}");
+    }
+}
+
+/// The file-meta group used to keep the ORIGINAL SOP Instance UID unless the
+/// action was exactly `uid` — reintroducing the identifier the sync exists to
+/// remove.
+#[test]
+fn file_meta_follows_the_dataset_for_any_action() {
+    for action in ["pseudonymize", "replace\n    value: \"1.2.3.4.5.6\""] {
+        let policy_yaml = format!(
+            "version: 1\nkind: dicom\ndataset: meta-test\nkey: {{ inline: \"s\" }}\n\
+             profile: basic\ntags:\n  - tag: SOPInstanceUID\n    action: {action}\n"
+        );
+        let tmp = tempfile::tempdir().unwrap();
+        let input = tmp.path().join("in.dcm");
+        let output = tmp.path().join("out.dcm");
+        synthetic::write_instance(&input, &InstanceOptions::default()).unwrap();
+        deidentify_file(&input, &output, &policy(&policy_yaml), &RunOptions::default()).unwrap();
+
+        let object = dicom_object::open_file(&output).unwrap();
+        let dataset = norm(&object.element(tags::SOP_INSTANCE_UID).unwrap().to_str().unwrap());
+        let meta = norm(&object.meta().media_storage_sop_instance_uid);
+        assert_eq!(meta, dataset, "action {action:?}: header must match dataset");
+        assert_ne!(
+            meta, PHI.sop_instance_uid,
+            "action {action:?}: the original UID must not survive in the header"
+        );
+    }
 }

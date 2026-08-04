@@ -29,6 +29,10 @@ pub struct PlantedPhi {
     pub study_description: &'static str,
     /// A name nested inside a sequence item.
     pub nested_observer: &'static str,
+    /// A multi-valued (VM 3) identifier attribute — `ID-1\\ID-2\\ID-3`.
+    pub other_patient_ids: &'static str,
+    /// A multi-valued (VM 3) date attribute.
+    pub multi_dates: &'static str,
     /// Value of a private attribute.
     pub private_value: &'static str,
     pub study_uid: &'static str,
@@ -49,6 +53,8 @@ pub const PHI: PlantedPhi = PlantedPhi {
     accession: "ACC-20240314-77",
     study_description: "Follow-up, refund to DE89370400440532013000, contact alice.muster@example.com",
     nested_observer: "Demo^Carla",
+    other_patient_ids: "OPID-1\\OPID-2\\OPID-3",
+    multi_dates: "20240314\\20240415\\20240516",
     private_value: "Muster^Alice (vendor copy)",
     study_uid: "1.2.840.113619.2.55.3.604688119.868.1700000000.1",
     series_uid: "1.2.840.113619.2.55.3.604688119.868.1700000000.2",
@@ -90,6 +96,11 @@ fn text(tag: Tag, vr: VR, value: &str) -> DataElement<InMemDicomObject> {
 }
 
 /// Build a PHI-laden instance in memory.
+///
+/// Uses a retired attribute (`OtherPatientIDs`) on purpose: retired attributes
+/// still appear in archived studies, which is exactly where decades-old PHI
+/// lives, and it is a convenient multi-valued identifier for tests.
+#[allow(deprecated)]
 pub fn instance(options: &InstanceOptions) -> FileDicomObject<InMemDicomObject> {
     let mut object = InMemDicomObject::new_empty();
 
@@ -135,6 +146,11 @@ pub fn instance(options: &InstanceOptions) -> FileDicomObject<InMemDicomObject> 
         VR::SQ,
         Value::Sequence(DataSetSequence::from(vec![item])),
     ));
+
+    // Multi-valued attributes: the backslash is a value separator, and every
+    // value must be de-identified independently.
+    object.put(text(tags::OTHER_PATIENT_I_DS, VR::LO, PHI.other_patient_ids));
+    object.put(text(tags::CALIBRATION_DATE, VR::DA, PHI.multi_dates));
 
     // A private attribute holding a copy of the patient name.
     object.put(text(PRIVATE_TAG, VR::LO, PHI.private_value));

@@ -6,6 +6,82 @@ All notable changes to deident. The format follows
 compatibility surfaces described in [Versioning](#versioning) below, which matter
 more than the crate version for anyone holding existing outputs.
 
+## [Unreleased]
+
+### Fixed
+
+Two bug-hunting passes over the workspace produced 24 verified findings; these
+are the ones fixed so far.
+
+**DICOM multi-valued attributes** — DICOM attributes are frequently multi-valued
+(`ID-1\ID-2\ID-3`), and the engine treated the backslash-joined string as one
+scalar. Consequences, all now fixed by applying each action **value by value**:
+
+- Values 2..n were destroyed rather than de-identified, and the vault recorded
+  the joined string as the "original", so nothing could be reversed per value.
+- `date_shift` shifted only the first value and left the rest as **original
+  dates**, while the report said the attribute had been shifted.
+- The UID cache keyed on the joined string, so one UID received two different
+  replacements in different files and a multi-valued reference lost entries.
+- Text VRs (`LT`/`ST`/`UT`/`UR`) are exempt, because a backslash there is literal
+  content rather than a separator.
+
+**Other correctness fixes**
+
+- Writing the output over the input truncated the source before a byte was read,
+  then reported success on the now-empty file — data loss with exit code 0,
+  affecting `pseudonymize`, `anonymize`, `chain` and `reverse`. Now refused, with
+  canonical-path comparison so `./a.csv` and `a.csv` are recognised as the same
+  file. (The sandbox path was unaffected, so native and wasm disagreed.)
+- The file-meta group kept the **original** SOP Instance UID unless the action was
+  exactly `uid`, reintroducing the identifier the sync exists to remove. It now
+  follows whatever the dataset ends up holding, and warns if that is empty.
+- `bucket` panicked on `inf`, `NaN`, `1e30` and values near the `i64` bounds (and
+  emitted reversed ranges in release builds). Those inputs are what numpy and R
+  write for missing floats; they are now suppressed like any other bad value.
+- `007` became `7` and `01234` became `1234` in JSONL and Parquet output. Integer
+  re-typing now requires an exact text round-trip, as the float path already did.
+- A digit string too large for `i64` turned a whole Parquet column into
+  `Float64`, rewriting a 20-digit account number as `1e20`.
+- `date_truncate` accepted any value starting with four digits, turning `10001`
+  into year `1000` with no warning.
+- Detector **execution order** was wrong: `phone` consumed SSNs and dates (and
+  left fragments behind), and `person_name` claimed organizations and medical
+  terms — so reports said "0 SSNs" for files full of them. `ALL` is now ordered
+  most-specific-first.
+- `::ffff:203.0.113.42` matched only `::ffff:203`, leaving most of the address in
+  output the report called redacted.
+- `api_key` missed `sk-proj-`, `sk-ant-api03-` and `github_pat_`.
+- `email`'s local-part class contained `/ ? # &`, so it ate `//user@host` out of
+  URLs and suppressed the `url` detector.
+- `address` could never match a German-style address (`Musterstrasse 12`),
+  leaving the whole German half of its own vocabulary unreachable.
+- Tokenizing rules from `presets` did not count as "produces reversible values",
+  so the vault was silently discarded while the report said none was needed; the
+  `inline-key` lint was silent for the same reason.
+- `free-text-without-patterns` ignored `presets` and so fired on policies that
+  did scan the column — a false-positive lint, which teaches people to ignore
+  lints.
+- DICOM `clean_text` with no `patterns:` was the only silent case, and it is the
+  worst one: `profile: basic` marks ~12 free-text attributes for cleaning.
+- DICOM `profile: none` silently discarded an explicit `structural:` block, so
+  names, private tags and study UIDs survived a policy that asked for exactly
+  those protections — and it still warned that values were reversible.
+- A DICOM vault was **write-only**: `vault export` parsed only the tabular
+  dialect and rejected the policy that produced the vault.
+- `chain` ran no policy lints and `--deny-lints` was a hard argument error; it
+  also lacked the Parquet native fallback that single jobs have.
+- `uids_remapped` counted distinct *tags* rather than distinct UIDs.
+
+### Added
+
+- A deterministic dataset generator
+  (`cargo run -p deident-core --example gen_dataset`) producing four
+  referentially-consistent tables with an engineered quasi-identifier
+  distribution, plus `clinic-messy.csv` containing real-world damage (BOM,
+  mixed-case headers, unparsable dates, Luhn-failing card shapes, zero-padded
+  identifiers). See the README's *Example datasets*.
+
 ## [0.2.0] — 2026-08-04
 
 ### Added
