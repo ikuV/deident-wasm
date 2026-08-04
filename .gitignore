@@ -3,7 +3,7 @@
 **/*.wasm
 
 # agent working files
-AGENT_PLAN*.md
+AGENT_PLAN.md
 
 # per-job workspaces & local run outputs
 /jobs
