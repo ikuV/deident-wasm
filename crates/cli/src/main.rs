@@ -266,7 +266,12 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
         vault_path: args.vault.as_deref().map(path_to_string).transpose()?,
     };
 
-    let engine = build_engine(&args.engine)?;
+    // The sandbox build has no Parquet support (it would bloat the guest
+    // module), so an `auto` run involving Parquet must stay in-process.
+    let needs_native = [&request.input_path, &request.output_path]
+        .iter()
+        .any(|path| is_parquet(path));
+    let engine = build_engine_for(&args.engine, needs_native)?;
     let audit = args.engine.audit_log.as_ref().map(AuditLog::new);
     let response = match &audit {
         Some(log) => AuditedEngine::new(engine.as_ref(), log.clone()).run(&request)?,
@@ -508,7 +513,19 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
 
 // --- engines -------------------------------------------------------------
 
+/// Whether a path names a Parquet file (unsupported inside the sandbox).
+fn is_parquet(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".parquet") || lower.ends_with(".pq")
+}
+
 fn build_engine(args: &EngineArgs) -> anyhow::Result<Box<dyn Engine>> {
+    build_engine_for(args, false)
+}
+
+/// Build the requested engine. `needs_native` forces in-process execution in
+/// `auto` mode for jobs the sandbox build cannot handle.
+fn build_engine_for(args: &EngineArgs, needs_native: bool) -> anyhow::Result<Box<dyn Engine>> {
     let limits = WasmLimits {
         max_memory_bytes: args.max_memory_mib * 1024 * 1024,
         timeout: std::time::Duration::from_secs(args.timeout_secs),
@@ -524,6 +541,13 @@ fn build_engine(args: &EngineArgs) -> anyhow::Result<Box<dyn Engine>> {
             let worker = resolve_worker_module(args.worker.as_deref())
                 .context("--engine wasm was requested but no worker module was found")?;
             Ok(Box::new(WasmEngine::from_file(&worker, limits)?))
+        }
+        EngineKind::Auto if needs_native => {
+            eprintln!(
+                "note: running in-process without sandbox isolation because Parquet is not \
+                 supported inside the sandbox build"
+            );
+            Ok(Box::new(NativeEngine))
         }
         EngineKind::Auto => match resolve_worker_module(args.worker.as_deref()) {
             Ok(worker) => Ok(Box::new(WasmEngine::from_file(&worker, limits)?)),

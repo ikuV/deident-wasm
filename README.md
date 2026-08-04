@@ -90,7 +90,7 @@ Options for `pseudonymize` / `anonymize` (the engine options also apply to `chai
 
 | Option | Required | Description |
 |---|---|---|
-| `<INPUT>` | yes | Input CSV file (first row must be the header) |
+| `<INPUT>` | yes | Input file; format inferred from the extension (`.csv`, `.jsonl`/`.ndjson`, `.parquet`) |
 | `--policy <FILE>` | yes | Policy YAML describing field classes and strategies |
 | `--out <FILE>` | yes | Output CSV file |
 | `--report <FILE>` | no | Write the JSON risk report to this path |
@@ -132,6 +132,11 @@ isolation layer around the parsing/transformation logic:
 
 Sandboxing *reduces* the blast radius of malformed inputs and future untrusted
 plugins; it is a mitigation, not an absolute security boundary.
+
+**Format caveat:** the sandbox build deliberately excludes Parquet — the arrow
+stack inflates the guest module from ~1.9 MB to ~7.4 MB, which Wasmtime then
+has to JIT-compile for every job. CSV and JSONL work in the sandbox; Parquet
+jobs run in-process (`--engine auto` switches automatically and says so).
 
 Build the worker module once, then use it:
 

@@ -113,14 +113,19 @@ fn guest_cannot_read_outside_preopened_workspace() {
     std::fs::write(&secret, "a,b\n1,2\n").unwrap();
 
     let policy = "version: 1\ndataset: iso\non_unlisted: keep\nfields: []\n";
+    // Each escape attempt with the refusal it must produce. The first two are
+    // real sandbox refusals (the path resolves to a readable host file, and
+    // the guest still cannot open it). `/etc/hosts` has no extension, so the
+    // format layer rejects it even earlier — either way the guest never reads
+    // outside its preopened directory.
     let escape_paths = [
-        secret.to_str().unwrap().to_string(), // absolute host path
-        "/job/../secret.csv".to_string(),     // .. escape from the preopen
-        "/etc/hosts".to_string(),             // well-known host file
+        (secret.to_str().unwrap().to_string(), "cannot open input"), // absolute host path
+        ("/job/../secret.csv".to_string(), "cannot open input"),     // .. escape
+        ("/etc/hosts".to_string(), "format"),                        // well-known host file
     ];
 
     let engine = wasm_engine(WasmLimits::default(), tmp.path());
-    for (i, escape) in escape_paths.iter().enumerate() {
+    for (i, (escape, expected_refusal)) in escape_paths.iter().enumerate() {
         let workspace = tmp.path().join(format!("job-esc-{i}"));
         std::fs::create_dir_all(&workspace).unwrap();
         let guest_request = JobRequest {
@@ -145,8 +150,8 @@ fn guest_cannot_read_outside_preopened_workspace() {
         .unwrap();
         match response.outcome {
             JobOutcome::Failed { error } => assert!(
-                error.contains("cannot open input"),
-                "path '{escape}' must fail to open, got: {error}"
+                error.contains(expected_refusal),
+                "path '{escape}' must be refused with '{expected_refusal}', got: {error}"
             ),
             JobOutcome::Succeeded { .. } => {
                 panic!("guest read '{escape}' outside its sandbox")

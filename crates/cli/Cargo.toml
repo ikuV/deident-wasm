@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 deident-types = { workspace = true }
-deident-core = { workspace = true }
+deident-core = { workspace = true, features = ["parquet"] }
 deident-host = { workspace = true }
 csv = { workspace = true }
 anyhow = { workspace = true }
@@ -27,6 +27,6 @@ predicates = { workspace = true }
 tempfile = { workspace = true }
 serde_json = { workspace = true }
 deident-types = { workspace = true }
-deident-core = { workspace = true }
+deident-core = { workspace = true, features = ["parquet"] }
 csv = { workspace = true }
 regex = { workspace = true }

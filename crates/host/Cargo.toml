@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 deident-types = { workspace = true }
-deident-core = { workspace = true }
+deident-core = { workspace = true, features = ["parquet"] }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }

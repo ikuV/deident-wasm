@@ -16,7 +16,9 @@ rust-version = "1.96"
 [workspace.dependencies]
 # crates in this workspace
 deident-types = { path = "crates/types" }
-deident-core = { path = "crates/core" }
+# Lean by default so the wasm guest stays small; crates that need Parquet
+# (host, cli) opt in with features = ["parquet"].
+deident-core = { path = "crates/core", default-features = false }
 deident-host = { path = "crates/host" }
 
 # external

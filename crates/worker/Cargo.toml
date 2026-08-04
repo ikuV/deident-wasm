@@ -11,5 +11,9 @@ path = "src/main.rs"
 
 [dependencies]
 deident-types = { workspace = true }
+# No default features: Parquet drags the whole arrow stack into the guest,
+# which inflated this module from ~0.6 MB to ~7.4 MB and made Wasmtime spend
+# tens of seconds JIT-compiling it per job engine. CSV and JSONL cover the
+# sandbox; Parquet jobs run on the native engine.
 deident-core = { workspace = true }
 serde_json = { workspace = true }
