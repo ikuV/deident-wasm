@@ -13,6 +13,21 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 
+# Optimize the WebAssembly JIT even in dev/test builds. Wasmtime compiles the
+# guest module on every engine construction, and an unoptimized Cranelift made
+# that dominate test time (the sandbox tests took ~90s, the feature matrix
+# ~130s). These are dependencies we execute but never step through, so there
+# is nothing to lose by optimizing them. Costs one slower first build; cached
+# afterwards.
+[profile.dev.package.wasmtime]
+opt-level = 2
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+[profile.dev.package.regalloc2]
+opt-level = 2
+
 [workspace.dependencies]
 # crates in this workspace
 deident-types = { path = "crates/types" }
