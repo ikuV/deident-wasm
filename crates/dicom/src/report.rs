@@ -48,6 +48,9 @@ pub struct PixelRisk {
 /// Result of de-identifying one instance.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DicomReport {
+    /// Version of deident that produced this report.
+    #[serde(default)]
+    pub tool_version: String,
     /// Dataset/identity scope from the policy.
     pub dataset: String,
     /// Source path, for correlation.
@@ -79,6 +82,9 @@ impl DicomReport {
 /// Aggregate result of de-identifying a directory of instances.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StudyReport {
+    /// Version of deident that produced this report.
+    #[serde(default)]
+    pub tool_version: String,
     pub dataset: String,
     pub root: String,
     pub instances_read: u64,

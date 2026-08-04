@@ -793,6 +793,31 @@ The `limitations` block is embedded in every report by design.
 - Non-goals: differential privacy, synthetic data generation, free-text/NLP
   de-identification, and legal certification of any output.
 
+## Versioning
+
+Current version: **0.2.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed.
+
+Four compatibility surfaces move independently, and the crate version is the
+least consequential of them:
+
+| Surface | Where | Breaking means |
+|---|---|---|
+| Crate version | `Cargo.toml` | Rust API changes |
+| Policy schema | `version:` in a policy | An existing policy stops loading |
+| Vault format | vault header `version` | An existing vault stops decrypting |
+| **Token derivation** | not yet versioned | **Every previously issued token changes value** |
+
+The last row is the one to watch. Tokens are a keyed hash of a domain and a value,
+so any change to the hash input produces different tokens for the same input —
+joins against earlier exports break and **nothing errors**. Changing token
+derivation therefore requires a major version bump and a migration note, even if
+the Rust API is untouched.
+
+Every report and audit record carries `tool_version`, so an artifact can be traced
+to the build that produced it. That matters because detection patterns and default
+profiles change between versions: "no identifiers found" only means something
+alongside the version that looked.
+
 ## Project layout
 
 | Crate | Purpose |

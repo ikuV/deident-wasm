@@ -510,3 +510,53 @@ fn dicom_deidentifies_a_study_and_reports_honestly() {
     // 1 study + 1 series + 2 SOP UIDs.
     assert_eq!(report["distinct_uids_remapped"], 4);
 }
+
+/// Every artifact must record the build that produced it. A privacy report is
+/// evidence, and detection patterns change between versions — "no identifiers
+/// found" only means something alongside the version that looked.
+#[test]
+fn reports_and_audit_records_carry_the_tool_version() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out.csv");
+    let report_path = tmp.path().join("report.json");
+    let audit_path = tmp.path().join("audit.jsonl");
+
+    deident()
+        .arg("anonymize")
+        .arg(example("data/patients.csv"))
+        .arg("--policy")
+        .arg(example("policies/patients.yaml"))
+        .arg("--out")
+        .arg(&out)
+        .arg("--report")
+        .arg(&report_path)
+        .arg("--audit-log")
+        .arg(&audit_path)
+        .arg("--engine")
+        .arg("native")
+        .assert()
+        .success();
+
+    let expected = env!("CARGO_PKG_VERSION");
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).unwrap()).unwrap();
+    assert_eq!(
+        report["tool_version"], expected,
+        "the risk report must state which build produced it"
+    );
+
+    let audit_line = std::fs::read_to_string(&audit_path).unwrap();
+    let record: serde_json::Value =
+        serde_json::from_str(audit_line.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        record["tool_version"], expected,
+        "the audit record must state which build ran the job"
+    );
+
+    // And the binary agrees with the crate it was built from.
+    deident()
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(expected));
+}

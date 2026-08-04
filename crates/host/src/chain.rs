@@ -202,6 +202,7 @@ pub fn run_chain(
     }
 
     Ok(ChainReport {
+        tool_version: deident_types::VERSION.to_string(),
         name: manifest.name,
         mode,
         completed,

@@ -400,6 +400,7 @@ pub fn run_job<R: Read, W: Write + Send>(
     let pattern_findings = patterns.findings(&headers, mode, &mut warnings);
 
     Ok(RiskReport {
+        tool_version: deident_types::VERSION.to_string(),
         dataset: policy.dataset.clone(),
         mode,
         rows_read,

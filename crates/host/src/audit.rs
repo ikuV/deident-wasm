@@ -22,6 +22,9 @@ use serde::{Deserialize, Serialize};
 pub struct AuditRecord {
     /// RFC 3339-ish UTC timestamp (second resolution).
     pub timestamp: String,
+    /// Version of deident that ran the job — an audit trail must record which
+    /// build produced an output, since behaviour changes between versions.
+    pub tool_version: String,
     pub job_id: String,
     pub mode: Mode,
     /// `native` or `wasm`.
@@ -120,6 +123,7 @@ fn build_record(
     };
     AuditRecord {
         timestamp: utc_timestamp(),
+        tool_version: deident_types::VERSION.to_string(),
         job_id: request.job_id.clone(),
         mode: request.mode,
         engine: engine.to_string(),

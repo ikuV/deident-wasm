@@ -5,6 +5,14 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Version of the deident tooling that produced an artifact.
+///
+/// Every report and audit record carries this: a privacy artifact is evidence,
+/// and evidence needs to say which build made it. Detection patterns, transforms
+/// and default profiles change between versions, so "no identifiers found" is
+/// only meaningful alongside the version that looked.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Transformation mode of a job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -63,6 +71,9 @@ pub enum JobOutcome {
 /// This report supports a risk assessment; it never certifies anonymization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskReport {
+    /// Version of deident that produced this report.
+    #[serde(default)]
+    pub tool_version: String,
     /// Dataset name from the policy.
     pub dataset: String,
     pub mode: Mode,
@@ -133,6 +144,9 @@ pub struct PatternFinding {
 /// Result of a chained multi-dataset run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainReport {
+    /// Version of deident that produced this report.
+    #[serde(default)]
+    pub tool_version: String,
     /// Chain name from the manifest.
     pub name: String,
     pub mode: Mode,

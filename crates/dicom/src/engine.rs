@@ -127,6 +127,7 @@ pub fn deidentify_directory(
     }
 
     Ok(StudyReport {
+        tool_version: crate::VERSION.to_string(),
         dataset: policy.dataset.clone(),
         root: input.display().to_string(),
         instances_read: read,
@@ -341,6 +342,7 @@ fn deidentify_with_cache(
         .filter(|f| f.action == "uid-remapped")
         .count() as u64;
     Ok(DicomReport {
+        tool_version: crate::VERSION.to_string(),
         dataset: policy.dataset.clone(),
         source: input.display().to_string(),
         sop_class_uid,

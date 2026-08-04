@@ -21,6 +21,9 @@
 //!   processed set.
 //! - The DICOM parser runs in-process, not inside the wasm sandbox.
 
+/// Version of the deident tooling, recorded in every report for provenance.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod engine;
 pub mod error;
 pub mod policy;
