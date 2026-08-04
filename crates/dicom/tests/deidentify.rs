@@ -440,3 +440,62 @@ fn a_tabular_policy_is_rejected() {
         "a tabular policy must not parse as a DICOM policy"
     );
 }
+
+/// `clean_text` only removes what its patterns match, so a field that matched
+/// nothing is in the output verbatim. That must be surfaced — silence would let
+/// a reader assume the field was sanitized.
+#[test]
+fn clean_text_that_matched_nothing_is_reported() {
+    let no_patterns = r#"
+version: 1
+kind: dicom
+dataset: test-study
+key: { inline: "dicom-test-secret" }
+profile: none
+tags:
+  - { tag: StudyDescription, action: clean_text }
+patterns:
+  - { name: iban, builtin: iban, action: redact }
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("in.dcm");
+    let output = tmp.path().join("out.dcm");
+    // A description with no IBAN and no email: nothing for the rules to match.
+    let options = InstanceOptions {
+        sop_instance_uid: "1.2.3.4.5".to_string(),
+        ..Default::default()
+    };
+    synthetic::write_instance(&input, &options).unwrap();
+
+    let report = deidentify_file(&input, &output, &policy(no_patterns), &RunOptions::default())
+        .unwrap();
+    // The planted description *does* contain an IBAN, so this one is cleaned.
+    assert!(
+        report.tags.iter().any(|t| t.action == "text-cleaned"),
+        "the IBAN in the description must be cleaned: {:?}",
+        report.tags
+    );
+
+    // Now a description with nothing to match.
+    let plain = tmp.path().join("plain.dcm");
+    let plain_out = tmp.path().join("plain-out.dcm");
+    {
+        let mut object = synthetic::instance(&InstanceOptions::default());
+        object.put(dicom_core::DataElement::new(
+            tags::STUDY_DESCRIPTION,
+            dicom_core::VR::LO,
+            dicom_core::value::PrimitiveValue::from("MR Knee routine"),
+        ));
+        object.write_to_file(&plain).unwrap();
+    }
+    let report =
+        deidentify_file(&plain, &plain_out, &policy(no_patterns), &RunOptions::default()).unwrap();
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("clean_text matched no pattern") && w.contains("StudyDescription")),
+        "a clean_text field that matched nothing must be surfaced: {:?}",
+        report.warnings
+    );
+}

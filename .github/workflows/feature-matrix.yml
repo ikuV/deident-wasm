@@ -9,7 +9,7 @@ name: Feature matrix
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "dev" ]
     paths:
       # Sample data/policies, and anything that can change how they are
       # transformed. Engine/policy source counts: a behavior change there is
@@ -20,7 +20,7 @@ on:
       - "Cargo.lock"
       - ".github/workflows/feature-matrix.yml"
   pull_request:
-    branches: [ "main" ]
+    branches: [ "dev" ]
     paths:
       # Sample data/policies, and anything that can change how they are
       # transformed. Engine/policy source counts: a behavior change there is

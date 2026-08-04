@@ -13,6 +13,14 @@ examples/chains/out/
 *.vault
 *.vault.jsonl
 
+# DICOM instances. Never commit these: they are large and routinely carry
+# patient identifiers in their metadata (and possibly burned into the pixels).
+# Test fixtures are generated instead — see crates/dicom/examples/gen_fixtures.rs
+*.dcm
+*.DCM
+*.dicom
+DICOMDIR
+
 # secrets / local env
 .env
 .env.*

@@ -200,6 +200,9 @@ struct Context<'a> {
     modified: u64,
     private_seen: u64,
     max_depth: u32,
+    /// Attributes a `clean_text` rule scanned without changing anything, so the
+    /// report can say the text passed through rather than staying silent.
+    text_unchanged: Vec<String>,
     warnings: Vec<String>,
 }
 
@@ -254,6 +257,7 @@ fn deidentify_with_cache(
         modified: 0,
         private_seen: 0,
         max_depth: 0,
+        text_unchanged: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -289,6 +293,17 @@ fn deidentify_with_cache(
             "pixel data risk is '{}': {}. Pixel data was NOT modified — burned-in identifiers, if any, survive",
             pixel_risk.level,
             pixel_risk.reasons.join("; ")
+        ));
+    }
+    if !ctx.text_unchanged.is_empty() {
+        let mut fields = ctx.text_unchanged.clone();
+        fields.sort();
+        fields.dedup();
+        ctx.warnings.push(format!(
+            "clean_text matched no pattern in {}: the free text is in the output unchanged. \
+             Pattern rules only remove what they match — review these fields, or use \
+             action: remove if they may contain names",
+            fields.join(", ")
         ));
     }
     if ctx.private_seen > 0 && policy.structural.retain_safe_private {
@@ -538,6 +553,12 @@ fn apply_action(
             }
             let cleaned = clean_text(&original, ctx, &keyword)?;
             if cleaned == original {
+                // No pattern matched, so the free text is in the output exactly
+                // as it arrived. That is correct for `clean_text` — it only
+                // removes what its patterns match — but silence would let a
+                // reader assume the field had been sanitized, when a name or
+                // identifier the patterns do not cover survives intact.
+                ctx.text_unchanged.push(keyword.clone());
                 Applied::Unchanged
             } else {
                 Applied::Value(PrimitiveValue::Str(cleaned))
