@@ -14,7 +14,7 @@
 //! prettier shape: anyone holding the key material can recompute the mapping,
 //! and the engine records it in the mapping vault exactly like a token.
 
-use crate::detect::BuiltinPattern;
+use crate::policy::BuiltinPattern;
 
 /// Shape a mock value should imitate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,19 +26,14 @@ pub enum MockShape {
 }
 
 impl MockShape {
-    /// The shape implied by a built-in pattern, when one exists.
-    ///
-    /// Most detectors have no format-preserving mock: there is no meaningful
-    /// "fake but valid" version of a medical term or a person's address, so
-    /// those rules must use `redact` or `token` instead.
-    pub fn for_builtin(builtin: BuiltinPattern) -> Option<Self> {
-        Some(match builtin {
+    /// The shape implied by a built-in pattern.
+    pub fn for_builtin(builtin: BuiltinPattern) -> Self {
+        match builtin {
             BuiltinPattern::Iban => MockShape::Iban,
             BuiltinPattern::Email => MockShape::Email,
             BuiltinPattern::Phone => MockShape::Phone,
             BuiltinPattern::CreditCard => MockShape::CreditCard,
-            _ => return None,
-        })
+        }
     }
 }
 

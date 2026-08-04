@@ -218,25 +218,6 @@ pub struct DicomPolicy {
     /// content-pattern model.
     #[serde(default)]
     pub patterns: Vec<deident_core::policy::PatternRule>,
-    /// Built-in detector groups to enable, reusing the tabular presets.
-    #[serde(default)]
-    pub presets: Vec<deident_core::policy::PresetRule>,
-}
-
-impl DicomPolicy {
-    /// Pattern rules with presets expanded, matching the tabular semantics.
-    pub fn effective_patterns(&self) -> Vec<deident_core::policy::PatternRule> {
-        let probe = deident_core::Policy {
-            version: 1,
-            dataset: self.dataset.clone(),
-            key: self.key.clone(),
-            on_unlisted: Default::default(),
-            fields: Vec::new(),
-            patterns: self.patterns.clone(),
-            presets: self.presets.clone(),
-        };
-        probe.effective_patterns()
-    }
 }
 
 /// Discriminator so a tabular policy cannot be passed to the DICOM path by
@@ -295,7 +276,6 @@ impl DicomPolicy {
                 on_unlisted: Default::default(),
                 fields: Vec::new(),
                 patterns: self.patterns.clone(),
-                presets: self.presets.clone(),
             };
             probe
                 .validate()

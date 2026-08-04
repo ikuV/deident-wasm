@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::detect::{BuiltinPattern, Validator};
 use crate::error::CoreError;
 
 /// A dataset policy: classifies fields and configures how each mode treats them.
@@ -27,61 +26,6 @@ pub struct Policy {
     /// free text). Run in both modes, after the column-level transform.
     #[serde(default)]
     pub patterns: Vec<PatternRule>,
-    /// Enable whole groups of built-in detectors without listing each one.
-    /// Expanded into `patterns` at run time; an explicit `patterns` entry with
-    /// the same name always wins.
-    #[serde(default)]
-    pub presets: Vec<PresetRule>,
-}
-
-/// Enables every built-in detector of a precision class.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PresetRule {
-    pub preset: PatternPreset,
-    /// Action for every rule the preset expands to.
-    pub action: PatternAction,
-    /// Columns to scan; omitted = every column in the output.
-    #[serde(default)]
-    pub fields: Option<Vec<String>>,
-    /// Redaction label override (`action: redact` only); defaults to the
-    /// per-detector `[NAME]`.
-    #[serde(default)]
-    pub replacement: Option<String>,
-}
-
-/// A group of built-in detectors, grouped by how much their matches can be
-/// trusted. See [`crate::detect::Precision`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PatternPreset {
-    /// Distinctive, mostly checksum-verified: email, IBAN, card, IP, URL,
-    /// API key, IFSC. Safe to act on automatically.
-    Precise,
-    /// Recognisable shape shared with innocent data: phone, SSN, date of birth,
-    /// passport, licence plate. Expect some false positives.
-    Moderate,
-    /// NER stand-ins: person name, address, organization, medical term. Expect
-    /// false positives **and** false negatives — prefer `detect`.
-    Heuristic,
-    /// Everything. Combine with `action: detect` for a survey pass.
-    All,
-}
-
-impl PatternPreset {
-    /// The detectors this preset covers.
-    pub fn builtins(&self) -> Vec<BuiltinPattern> {
-        crate::detect::ALL
-            .iter()
-            .copied()
-            .filter(|b| match self {
-                PatternPreset::All => true,
-                PatternPreset::Precise => b.precision() == crate::detect::Precision::Precise,
-                PatternPreset::Moderate => b.precision() == crate::detect::Precision::Moderate,
-                PatternPreset::Heuristic => b.precision() == crate::detect::Precision::Heuristic,
-            })
-            .collect()
-    }
 }
 
 /// Source of the pseudonymization secret.
@@ -230,12 +174,6 @@ pub struct PatternRule {
     /// so it is only required when mocking a custom `regex` rule.
     #[serde(default)]
     pub mock: Option<MockShapeCfg>,
-    /// Checksum validation applied to every match, suppressing false positives.
-    /// Defaults to the built-in's own validator (Luhn for cards, mod-97 for
-    /// IBANs, allocation rules for SSNs); set `none` to disable, or add one to a
-    /// custom `regex` rule.
-    #[serde(default)]
-    pub validate: Option<Validator>,
 }
 
 impl PatternRule {
@@ -253,20 +191,7 @@ impl PatternRule {
     pub fn mock_shape(&self) -> Option<crate::mock::MockShape> {
         self.mock
             .map(Into::into)
-            .or_else(|| self.builtin.and_then(crate::mock::MockShape::for_builtin))
-    }
-
-    /// Checksum validation for this rule: the explicit override, else the
-    /// built-in's default, else none.
-    pub fn validator(&self) -> Validator {
-        self.validate
-            .or_else(|| self.builtin.map(|b| b.validator()))
-            .unwrap_or_default()
-    }
-
-    /// Precision class, used to warn when a heuristic rule is set to modify data.
-    pub fn precision(&self) -> Option<crate::detect::Precision> {
-        self.builtin.map(|b| b.precision())
+            .or_else(|| self.builtin.map(crate::mock::MockShape::for_builtin))
     }
 }
 
@@ -322,6 +247,29 @@ impl From<MockShapeCfg> for crate::mock::MockShape {
             MockShapeCfg::Email => crate::mock::MockShape::Email,
             MockShapeCfg::Phone => crate::mock::MockShape::Phone,
             MockShapeCfg::CreditCard => crate::mock::MockShape::CreditCard,
+        }
+    }
+}
+
+/// Built-in content patterns. These are pragmatic heuristics, not validators —
+/// expect some false positives/negatives and tune with a custom `regex` where
+/// needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltinPattern {
+    Iban,
+    Email,
+    Phone,
+    CreditCard,
+}
+
+impl BuiltinPattern {
+    pub fn regex_source(&self) -> &'static str {
+        match self {
+            BuiltinPattern::Iban => r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\b",
+            BuiltinPattern::Email => r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+            BuiltinPattern::Phone => r"\+?[0-9][0-9 ()/\-]{6,}[0-9]",
+            BuiltinPattern::CreditCard => r"\b(?:[0-9]{4}[ -]?){3}[0-9]{1,4}\b",
         }
     }
 }
@@ -412,9 +360,6 @@ impl Policy {
                 )));
             }
             if pattern.action == PatternAction::Mock && pattern.mock_shape().is_none() {
-                // Reached when a detector has no format-preserving equivalent
-                // (there is no "valid fake" medical term) or a custom regex gave
-                // no shape.
                 return Err(CoreError::Policy(format!(
                     "pattern '{}': action: mock needs a shape — set 'mock' explicitly or use a \
                      'builtin' pattern",
@@ -422,65 +367,7 @@ impl Policy {
                 )));
             }
         }
-        for preset in &self.presets {
-            if preset.replacement.is_some() && preset.action != PatternAction::Redact {
-                return Err(CoreError::Policy(
-                    "preset 'replacement' is only valid with action: redact".into(),
-                ));
-            }
-            if preset.action == PatternAction::Mock {
-                return Err(CoreError::Policy(
-                    "presets cannot use action: mock — most detectors have no \
-                     format-preserving equivalent; name the rules explicitly instead"
-                        .into(),
-                ));
-            }
-        }
-        // Expanded rules must validate too (catches an unusable combination
-        // before a job starts rather than mid-run).
-        for rule in self.effective_patterns() {
-            if let Err(err) = regex::Regex::new(rule.regex_source()) {
-                return Err(CoreError::Policy(format!(
-                    "pattern '{}': invalid regex: {err}",
-                    rule.name
-                )));
-            }
-        }
         Ok(())
-    }
-
-    /// All pattern rules in execution order: expanded presets first, then the
-    /// explicit `patterns` list.
-    ///
-    /// A preset never overrides an explicit rule of the same name, so a policy
-    /// can enable a whole class and still tune one member of it.
-    pub fn effective_patterns(&self) -> Vec<PatternRule> {
-        let explicit: std::collections::HashSet<&str> =
-            self.patterns.iter().map(|p| p.name.as_str()).collect();
-        let mut rules: Vec<PatternRule> = Vec::new();
-        for preset in &self.presets {
-            for builtin in preset.preset.builtins() {
-                if explicit.contains(builtin.name()) {
-                    continue;
-                }
-                if rules.iter().any(|r| r.name == builtin.name()) {
-                    continue;
-                }
-                rules.push(PatternRule {
-                    name: builtin.name().to_string(),
-                    regex: None,
-                    builtin: Some(builtin),
-                    fields: preset.fields.clone(),
-                    action: preset.action,
-                    replacement: preset.replacement.clone(),
-                    prefix: None,
-                    mock: None,
-                    validate: None,
-                });
-            }
-        }
-        rules.extend(self.patterns.iter().cloned());
-        rules
     }
 
     /// Look up the policy entry for a column name, if any.
