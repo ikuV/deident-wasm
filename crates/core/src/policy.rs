@@ -170,6 +170,10 @@ pub struct PatternRule {
     /// Token prefix for `action: token`.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// Shape to imitate for `action: mock`. Defaults to the `builtin` shape,
+    /// so it is only required when mocking a custom `regex` rule.
+    #[serde(default)]
+    pub mock: Option<MockShapeCfg>,
 }
 
 impl PatternRule {
@@ -180,6 +184,14 @@ impl PatternRule {
             (None, Some(builtin)) => builtin.regex_source(),
             (None, None) => unreachable!("validated: one of regex/builtin is set"),
         }
+    }
+
+    /// The mock shape for `action: mock`: the explicit `mock:` selector, or
+    /// the shape implied by `builtin:`.
+    pub fn mock_shape(&self) -> Option<crate::mock::MockShape> {
+        self.mock
+            .map(Into::into)
+            .or_else(|| self.builtin.map(crate::mock::MockShape::for_builtin))
     }
 }
 
@@ -195,6 +207,10 @@ pub enum PatternAction {
     /// source; the affected output is pseudonymous, i.e. reversible with the
     /// key material).
     Token,
+    /// Replace each match with a deterministic, structurally valid fake value
+    /// of the same shape (requires a key source; like `token`, the result is
+    /// pseudonymous rather than anonymous).
+    Mock,
 }
 
 impl PatternAction {
@@ -204,6 +220,33 @@ impl PatternAction {
             PatternAction::Detect => "detected",
             PatternAction::Redact => "redacted",
             PatternAction::Token => "tokenized",
+            PatternAction::Mock => "mocked",
+        }
+    }
+
+    /// Whether this action derives values from the dataset key.
+    pub fn needs_key(&self) -> bool {
+        matches!(self, PatternAction::Token | PatternAction::Mock)
+    }
+}
+
+/// Mock shape selector in policy YAML.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MockShapeCfg {
+    Iban,
+    Email,
+    Phone,
+    CreditCard,
+}
+
+impl From<MockShapeCfg> for crate::mock::MockShape {
+    fn from(cfg: MockShapeCfg) -> Self {
+        match cfg {
+            MockShapeCfg::Iban => crate::mock::MockShape::Iban,
+            MockShapeCfg::Email => crate::mock::MockShape::Email,
+            MockShapeCfg::Phone => crate::mock::MockShape::Phone,
+            MockShapeCfg::CreditCard => crate::mock::MockShape::CreditCard,
         }
     }
 }
@@ -307,6 +350,19 @@ impl Policy {
             if pattern.prefix.is_some() && pattern.action != PatternAction::Token {
                 return Err(CoreError::Policy(format!(
                     "pattern '{}': 'prefix' is only valid with action: token",
+                    pattern.name
+                )));
+            }
+            if pattern.mock.is_some() && pattern.action != PatternAction::Mock {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}': 'mock' is only valid with action: mock",
+                    pattern.name
+                )));
+            }
+            if pattern.action == PatternAction::Mock && pattern.mock_shape().is_none() {
+                return Err(CoreError::Policy(format!(
+                    "pattern '{}': action: mock needs a shape — set 'mock' explicitly or use a \
+                     'builtin' pattern",
                     pattern.name
                 )));
             }

@@ -52,6 +52,9 @@ pub struct ChainJobSpec {
     /// Optional per-job JSON risk report.
     #[serde(default)]
     pub report: Option<PathBuf>,
+    /// Optional per-job encrypted mapping vault.
+    #[serde(default)]
+    pub vault: Option<PathBuf>,
 }
 
 impl ChainManifest {
@@ -126,6 +129,11 @@ pub fn run_chain(
             output_path: path_string(&output)?,
             report_path: job
                 .report
+                .as_ref()
+                .map(|p| path_string(&base.join(p)))
+                .transpose()?,
+            vault_path: job
+                .vault
                 .as_ref()
                 .map(|p| path_string(&base.join(p)))
                 .transpose()?,

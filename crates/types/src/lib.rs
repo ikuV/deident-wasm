@@ -36,6 +36,10 @@ pub struct JobRequest {
     pub output_path: String,
     /// Optional path for the JSON risk report.
     pub report_path: Option<String>,
+    /// Optional path for the encrypted mapping vault (pseudonym reversal
+    /// material). Only written when the job produces tokens or mocks.
+    #[serde(default)]
+    pub vault_path: Option<String>,
 }
 
 /// Result of a job as reported by an execution engine.

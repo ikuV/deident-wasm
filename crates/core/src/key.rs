@@ -11,13 +11,14 @@ use crate::policy::Policy;
 /// Domain-separation context prefix for key derivation.
 const KDF_CONTEXT_PREFIX: &str = "deident-wasm/v1/pseudonym/";
 
-/// Resolve the dataset-scoped pseudonymization key from the policy's key
-/// source. Prefers the environment variable; falls back to the inline secret
-/// with a warning pushed to `warnings`.
-pub fn resolve_dataset_key(
-    policy: &Policy,
-    warnings: &mut Vec<String>,
-) -> Result<[u8; 32], CoreError> {
+/// Resolve the raw secret material from the policy's key source. Prefers the
+/// environment variable; falls back to the inline secret with a warning
+/// pushed to `warnings`.
+///
+/// Callers derive purpose-specific keys from this — [`derive_dataset_key`]
+/// for tokens, [`crate::vault::derive_vault_key`] for vault encryption — so
+/// the two never share key material.
+pub fn resolve_secret(policy: &Policy, warnings: &mut Vec<String>) -> Result<Vec<u8>, CoreError> {
     let Some(source) = &policy.key else {
         return Err(CoreError::Key(
             "pseudonymization requires a key source in the policy (key.env or key.inline)".into(),
@@ -25,9 +26,7 @@ pub fn resolve_dataset_key(
     };
     if let Some(var) = &source.env {
         match std::env::var(var) {
-            Ok(secret) if !secret.is_empty() => {
-                return Ok(derive_dataset_key(secret.as_bytes(), &policy.dataset));
-            }
+            Ok(secret) if !secret.is_empty() => return Ok(secret.into_bytes()),
             _ if source.inline.is_none() => {
                 return Err(CoreError::Key(format!(
                     "environment variable '{var}' is not set (and no inline fallback is configured)"
@@ -43,11 +42,20 @@ pub fn resolve_dataset_key(
                 .into(),
         );
         tracing::warn!("using inline pseudonymization key from policy (demo/test use only)");
-        return Ok(derive_dataset_key(inline.as_bytes(), &policy.dataset));
+        return Ok(inline.as_bytes().to_vec());
     }
     Err(CoreError::Key(
         "key source declares neither env nor inline".into(),
     ))
+}
+
+/// Resolve the dataset-scoped tokenization key from the policy's key source.
+pub fn resolve_dataset_key(
+    policy: &Policy,
+    warnings: &mut Vec<String>,
+) -> Result<[u8; 32], CoreError> {
+    let secret = resolve_secret(policy, warnings)?;
+    Ok(derive_dataset_key(&secret, &policy.dataset))
 }
 
 /// Derive the per-dataset key from raw secret material.

@@ -7,6 +7,7 @@ use std::io::{Read, Write};
 use deident_types::{DirectIdentifierFinding, Mode, PatternFinding, RiskReport};
 
 use crate::error::CoreError;
+use crate::format::{self, Format};
 use crate::key;
 use crate::policy::{AnonymizeCfg, FieldClass, PatternAction, Policy, UnlistedAction};
 use crate::report;
@@ -39,7 +40,7 @@ impl<'p> Patterns<'p> {
     /// Dropped and tokenized columns are never scanned (nothing left to find).
     fn compile(
         policy: &'p Policy,
-        headers: &csv::StringRecord,
+        headers: &[String],
         actions: &[ColumnAction],
     ) -> Result<Self, CoreError> {
         let mut rules = Vec::with_capacity(policy.patterns.len());
@@ -72,11 +73,9 @@ impl<'p> Patterns<'p> {
         Ok(Self { rules, per_column, counts })
     }
 
-    /// Whether any rule tokenizes matches (and therefore needs a key).
+    /// Whether any rule derives values from the key (token or mock).
     fn needs_key(&self) -> bool {
-        self.rules
-            .iter()
-            .any(|(rule, _)| rule.action == PatternAction::Token)
+        self.rules.iter().any(|(rule, _)| rule.action.needs_key())
     }
 
     /// Run the applicable rules over one (already column-transformed) cell.
@@ -112,19 +111,28 @@ impl<'p> Patterns<'p> {
                         self.counts[i][col] += matches;
                     }
                 }
-                PatternAction::Token => {
-                    let key = dataset_key.expect("key resolved when token patterns exist");
+                PatternAction::Token | PatternAction::Mock => {
+                    let key = dataset_key.expect("key resolved when keyed patterns exist");
                     let domain = format!("pattern:{}", rule.name);
+                    let shape = rule.mock_shape();
                     let mut mappings: Vec<MappingEntry> = Vec::new();
                     let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
                         let matched = caps.get(0).expect("group 0 always exists").as_str();
-                        let token = key::token(key, &domain, matched, rule.prefix.as_deref());
+                        let replacement = match rule.action {
+                            PatternAction::Mock => crate::mock::generate(
+                                shape.expect("validated: mock rules have a shape"),
+                                key,
+                                &domain,
+                                matched,
+                            ),
+                            _ => key::token(key, &domain, matched, rule.prefix.as_deref()),
+                        };
                         mappings.push(MappingEntry {
                             field: domain.clone(),
                             original: matched.to_string(),
-                            token: token.clone(),
+                            token: replacement.clone(),
                         });
-                        token
+                        replacement
                     });
                     if !mappings.is_empty() {
                         current = replaced.into_owned();
@@ -142,7 +150,7 @@ impl<'p> Patterns<'p> {
     /// Aggregate findings and mode-dependent warnings for the report.
     fn findings(
         &self,
-        headers: &csv::StringRecord,
+        headers: &[String],
         mode: Mode,
         warnings: &mut Vec<String>,
     ) -> Vec<PatternFinding> {
@@ -167,10 +175,13 @@ impl<'p> Patterns<'p> {
                         "pattern '{}' matched {rule_total} time(s) (action: detect); matching values remain in the output",
                         rule.name
                     )),
-                    PatternAction::Token if mode == Mode::Anonymize => warnings.push(format!(
-                        "pattern '{}' inserted deterministic tokens; treat the affected output as pseudonymous (reversible with the key material)",
-                        rule.name
-                    )),
+                    PatternAction::Token | PatternAction::Mock if mode == Mode::Anonymize => {
+                        warnings.push(format!(
+                            "pattern '{}' inserted deterministic {}; treat the affected output as pseudonymous (reversible with the key material)",
+                            rule.name,
+                            if rule.action == PatternAction::Mock { "mock values" } else { "tokens" }
+                        ))
+                    }
                     _ => {}
                 }
             }
@@ -179,13 +190,31 @@ impl<'p> Patterns<'p> {
     }
 }
 
-/// Run one CSV job: read from `input`, write the transformed CSV to `output`,
-/// and return the risk report. Pseudonym mappings are handed to `vault`.
-pub fn run_csv_job<R: Read, W: Write>(
+/// Run one CSV job. Convenience wrapper around [`run_job`] for the common
+/// CSV-in/CSV-out case.
+pub fn run_csv_job<R: Read, W: Write + Send>(
     mode: Mode,
     policy: &Policy,
     input: R,
     output: W,
+    vault: &mut dyn MappingVault,
+) -> Result<RiskReport, CoreError> {
+    run_job(mode, policy, input, output, Format::Csv, Format::Csv, vault)
+}
+
+/// Run one job: read `input` in `input_format`, write the transformed table
+/// to `output` in `output_format`, and return the risk report. Pseudonym
+/// mappings are handed to `vault`.
+///
+/// Input and output formats are independent, so a job can convert while it
+/// transforms.
+pub fn run_job<R: Read, W: Write + Send>(
+    mode: Mode,
+    policy: &Policy,
+    input: R,
+    output: W,
+    input_format: Format,
+    output_format: Format,
     vault: &mut dyn MappingVault,
 ) -> Result<RiskReport, CoreError> {
     policy.validate()?;
@@ -193,11 +222,11 @@ pub fn run_csv_job<R: Read, W: Write>(
     let mut warnings: Vec<String> = Vec::new();
     let mut findings: Vec<DirectIdentifierFinding> = Vec::new();
 
-    let mut reader = csv::Reader::from_reader(input);
-    let headers = reader.headers()?.clone();
+    let mut reader = format::reader(input_format, input)?;
+    let headers = reader.headers()?;
 
     for field in &policy.fields {
-        if !headers.iter().any(|h| h == field.name) {
+        if !headers.iter().any(|h| *h == field.name) {
             warnings.push(format!(
                 "policy field '{}' does not exist in the input and was ignored",
                 field.name
@@ -240,22 +269,21 @@ pub fn run_csv_job<R: Read, W: Write>(
         .collect();
     let qi_fields: Vec<String> = qi_columns.iter().map(|&i| headers[i].to_string()).collect();
 
-    let mut writer = csv::Writer::from_writer(output);
-    let out_headers: Vec<&str> = headers
+    let mut writer = format::writer(output_format, output)?;
+    let out_headers: Vec<String> = headers
         .iter()
         .zip(&actions)
         .filter(|(_, a)| !matches!(a, ColumnAction::Drop))
-        .map(|(h, _)| h)
+        .map(|(h, _)| h.clone())
         .collect();
-    writer.write_record(&out_headers)?;
+    writer.write_headers(&out_headers)?;
 
     let mut rows_read = 0u64;
     let mut rows_written = 0u64;
     let mut suppressed_values = 0u64;
     let mut classes: HashMap<Vec<String>, u64> = HashMap::new();
 
-    for record in reader.records() {
-        let record = record?;
+    while let Some(record) = reader.next_row()? {
         rows_read += 1;
         let mut out_row: Vec<String> = Vec::with_capacity(out_headers.len());
         let mut qi_tuple: Vec<String> = Vec::with_capacity(qi_columns.len());
@@ -307,10 +335,10 @@ pub fn run_csv_job<R: Read, W: Write>(
         if !qi_columns.is_empty() {
             *classes.entry(qi_tuple).or_insert(0) += 1;
         }
-        writer.write_record(&out_row)?;
+        writer.write_row(&out_row)?;
         rows_written += 1;
     }
-    writer.flush()?;
+    writer.finish()?;
 
     if suppressed_values > 0 {
         warnings.push(format!(
@@ -319,6 +347,7 @@ pub fn run_csv_job<R: Read, W: Write>(
         ));
     }
 
+    vault.finish()?;
     let pattern_findings = patterns.findings(&headers, mode, &mut warnings);
 
     Ok(RiskReport {

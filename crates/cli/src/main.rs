@@ -1,17 +1,24 @@
 //! `deident` — CLI for the privacy transformation engine.
 //!
-//! Two modes:
+//! Commands:
 //! - `pseudonymize`: reversible, deterministic tokenization of direct
 //!   identifiers (output remains personal data),
 //! - `anonymize`: irreversible, risk-assessed transformation of direct and
-//!   quasi-identifiers with a JSON risk report.
+//!   quasi-identifiers with a JSON risk report,
+//! - `chain`: several datasets of one export, with shared token scoping,
+//! - `lint`: report risky-but-valid policy patterns,
+//! - `vault`: inspect/export an encrypted mapping vault,
+//! - `reverse`: re-identify tokenized columns using a vault.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use deident_host::{Engine, NativeEngine, WasmEngine, WasmLimits};
+use deident_core::lint::LintLevel;
+use deident_core::vault::{MappingEntry, derive_vault_key, read_vault};
+use deident_host::wasm::FuelPolicy;
+use deident_host::{AuditLog, AuditedEngine, Engine, NativeEngine, WasmEngine, WasmLimits};
 use deident_types::{JobOutcome, JobRequest, Mode, RiskReport};
 
 #[derive(Parser)]
@@ -39,22 +46,33 @@ enum Command {
     /// Run several datasets of one logical export as a chain, with shared
     /// token scoping and a combined report.
     Chain(ChainArgs),
+    /// Check a policy for risky-but-valid configurations.
+    Lint(LintArgs),
+    /// Inspect or export an encrypted mapping vault.
+    Vault(VaultArgs),
+    /// Re-identify tokenized columns of a dataset using a vault.
+    Reverse(ReverseArgs),
 }
 
 #[derive(Args)]
 struct JobArgs {
-    /// Input CSV file.
+    /// Input file (.csv, .jsonl, .parquet).
     input: PathBuf,
     /// Policy YAML describing field classes and strategies.
     #[arg(long)]
     policy: PathBuf,
-    /// Output CSV file.
+    /// Output file; its extension selects the output format.
     #[arg(long)]
     out: PathBuf,
     /// Optional JSON risk report file.
     #[arg(long)]
     report: Option<PathBuf>,
+    /// Write an encrypted mapping vault (re-identification material) here.
+    #[arg(long)]
+    vault: Option<PathBuf>,
 
+    #[command(flatten)]
+    lint: LintPolicyArgs,
     #[command(flatten)]
     engine: EngineArgs,
 }
@@ -76,6 +94,70 @@ struct ChainArgs {
     engine: EngineArgs,
 }
 
+#[derive(Args)]
+struct LintArgs {
+    /// Policy YAML to check.
+    policy: PathBuf,
+    /// Restrict to lints relevant for one mode.
+    #[arg(long, value_enum)]
+    mode: Option<CliMode>,
+    /// Emit findings as JSON.
+    #[arg(long)]
+    json: bool,
+    /// Exit non-zero if any warning-level lint fires.
+    #[arg(long)]
+    deny: bool,
+}
+
+#[derive(Args)]
+struct VaultArgs {
+    #[command(subcommand)]
+    command: VaultCommand,
+}
+
+#[derive(Subcommand)]
+enum VaultCommand {
+    /// Decrypt a vault and write its mappings as CSV (token,original).
+    Export(VaultExportArgs),
+}
+
+#[derive(Args)]
+struct VaultExportArgs {
+    /// Encrypted vault file.
+    vault: PathBuf,
+    /// Policy the vault was produced with (supplies dataset + key source).
+    #[arg(long)]
+    policy: PathBuf,
+    /// Output CSV; defaults to stdout.
+    #[arg(long)]
+    out: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct ReverseArgs {
+    /// Pseudonymized input file.
+    input: PathBuf,
+    /// Encrypted vault holding the mappings.
+    #[arg(long)]
+    vault: PathBuf,
+    /// Policy the data was produced with (supplies dataset + key source).
+    #[arg(long)]
+    policy: PathBuf,
+    /// Output file with tokens replaced by their original values.
+    #[arg(long)]
+    out: PathBuf,
+}
+
+#[derive(Args)]
+struct LintPolicyArgs {
+    /// Skip the pre-flight policy lint.
+    #[arg(long)]
+    no_lint: bool,
+    /// Refuse to run when a warning-level lint fires.
+    #[arg(long)]
+    deny_lints: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum CliMode {
     Pseudonymize,
@@ -93,29 +175,43 @@ impl From<CliMode> for Mode {
 
 #[derive(Args)]
 struct EngineArgs {
-    /// Execution engine: `wasm` runs each job in a per-job WebAssembly
-    /// sandbox (fresh store, job directory as the only filesystem
-    /// capability, no network); `native` runs in-process.
-    #[arg(long, value_enum, default_value_t = EngineKind::Native)]
+    /// Execution engine. `auto` (default) uses the wasm sandbox when a worker
+    /// module is available and falls back to in-process execution with a
+    /// warning; `wasm` requires the sandbox; `native` runs in-process.
+    #[arg(long, value_enum, default_value_t = EngineKind::Auto)]
     engine: EngineKind,
 
-    /// Path to the compiled worker module (wasm engine only). Defaults to
+    /// Path to the compiled worker module. Defaults to
     /// `$DEIDENT_WORKER_WASM`, then `deident-worker.wasm` next to this
     /// binary, then the local cargo build under target/wasm32-wasip1/.
     #[arg(long)]
     worker: Option<PathBuf>,
 
-    /// Guest memory limit in MiB (wasm engine only).
+    /// Guest memory limit in MiB (sandbox only).
     #[arg(long, default_value_t = 256)]
     max_memory_mib: usize,
 
-    /// Job timeout in seconds (wasm engine only).
+    /// Job timeout in seconds (sandbox only).
     #[arg(long, default_value_t = 30)]
     timeout_secs: u64,
+
+    /// Fixed CPU budget in Wasmtime fuel units (sandbox only). Default scales
+    /// the budget with the input size.
+    #[arg(long)]
+    fuel: Option<u64>,
+
+    /// Disable fuel metering; the wall-clock timeout still applies.
+    #[arg(long, conflicts_with = "fuel")]
+    no_fuel: bool,
+
+    /// Append a structured JSONL audit record per job to this file.
+    #[arg(long)]
+    audit_log: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum EngineKind {
+    Auto,
     Native,
     Wasm,
 }
@@ -134,6 +230,9 @@ fn main() -> ExitCode {
         Command::Pseudonymize(args) => run_job(Mode::Pseudonymize, args),
         Command::Anonymize(args) => run_job(Mode::Anonymize, args),
         Command::Chain(args) => run_chain(args),
+        Command::Lint(args) => run_lint(args),
+        Command::Vault(args) => run_vault(args),
+        Command::Reverse(args) => run_reverse(args),
     };
 
     match result {
@@ -145,9 +244,59 @@ fn main() -> ExitCode {
     }
 }
 
+// --- transformation jobs -------------------------------------------------
+
+fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
+    let policy_yaml = std::fs::read_to_string(&args.policy)
+        .with_context(|| format!("cannot read policy '{}'", args.policy.display()))?;
+
+    if !args.lint.no_lint
+        && let Some(code) = preflight_lint(&policy_yaml, Some(mode), args.lint.deny_lints)?
+    {
+        return Ok(code);
+    }
+
+    let request = JobRequest {
+        job_id: uuid::Uuid::new_v4().to_string(),
+        mode,
+        policy_yaml,
+        input_path: path_to_string(&args.input)?,
+        output_path: path_to_string(&args.out)?,
+        report_path: args.report.as_deref().map(path_to_string).transpose()?,
+        vault_path: args.vault.as_deref().map(path_to_string).transpose()?,
+    };
+
+    let engine = build_engine(&args.engine)?;
+    let audit = args.engine.audit_log.as_ref().map(AuditLog::new);
+    let response = match &audit {
+        Some(log) => AuditedEngine::new(engine.as_ref(), log.clone()).run(&request)?,
+        None => engine.run(&request)?,
+    };
+
+    match response.outcome {
+        JobOutcome::Succeeded { report } => {
+            print_summary(mode, args, &report);
+            Ok(ExitCode::SUCCESS)
+        }
+        JobOutcome::Failed { error } => {
+            eprintln!("error: job {} failed: {error}", response.job_id);
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
 fn run_chain(args: &ChainArgs) -> anyhow::Result<ExitCode> {
     let engine = build_engine(&args.engine)?;
-    let report = deident_host::run_chain(&args.manifest, args.mode.into(), engine.as_ref())?;
+    let audit = args.engine.audit_log.as_ref().map(AuditLog::new);
+    let audited;
+    let engine: &dyn Engine = match &audit {
+        Some(log) => {
+            audited = AuditedEngine::new(engine.as_ref(), log.clone());
+            &audited
+        }
+        None => engine.as_ref(),
+    };
+    let report = deident_host::run_chain(&args.manifest, args.mode.into(), engine)?;
 
     println!(
         "Chain '{}' ({:?}): {} of {} job(s) succeeded",
@@ -185,46 +334,207 @@ fn run_chain(args: &ChainArgs) -> anyhow::Result<ExitCode> {
     })
 }
 
-fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
+// --- lint ----------------------------------------------------------------
+
+fn run_lint(args: &LintArgs) -> anyhow::Result<ExitCode> {
     let policy_yaml = std::fs::read_to_string(&args.policy)
         .with_context(|| format!("cannot read policy '{}'", args.policy.display()))?;
+    let policy = deident_core::Policy::from_yaml(&policy_yaml)
+        .with_context(|| format!("invalid policy '{}'", args.policy.display()))?;
+    let lints = deident_core::lint(&policy, args.mode.map(Into::into));
 
-    let request = JobRequest {
-        job_id: uuid::Uuid::new_v4().to_string(),
-        mode,
-        policy_yaml,
-        input_path: path_to_string(&args.input)?,
-        output_path: path_to_string(&args.out)?,
-        report_path: args.report.as_deref().map(path_to_string).transpose()?,
-    };
-
-    let engine = build_engine(&args.engine)?;
-    let response = engine.run(&request)?;
-
-    match response.outcome {
-        JobOutcome::Succeeded { report } => {
-            print_summary(mode, args, &report);
-            Ok(ExitCode::SUCCESS)
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&lints)?);
+    } else if lints.is_empty() {
+        println!("No lints for '{}'.", args.policy.display());
+    } else {
+        for lint in &lints {
+            let subject = lint
+                .subject
+                .as_ref()
+                .map(|s| format!(" [{s}]"))
+                .unwrap_or_default();
+            println!("{}{}: {} ({})", lint.level.label(), subject, lint.message, lint.rule);
         }
-        JobOutcome::Failed { error } => {
-            eprintln!("error: job {} failed: {error}", response.job_id);
-            Ok(ExitCode::FAILURE)
+    }
+
+    let warnings = lints.iter().filter(|l| l.level == LintLevel::Warning).count();
+    Ok(if args.deny && warnings > 0 {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+/// Lint before a job. Returns `Some(exit code)` when the job must not run.
+fn preflight_lint(
+    policy_yaml: &str,
+    mode: Option<Mode>,
+    deny: bool,
+) -> anyhow::Result<Option<ExitCode>> {
+    let Ok(policy) = deident_core::Policy::from_yaml(policy_yaml) else {
+        // Let the job itself produce the parse error, with its own context.
+        return Ok(None);
+    };
+    let lints = deident_core::lint(&policy, mode);
+    let warnings: Vec<_> = lints
+        .iter()
+        .filter(|l| l.level == LintLevel::Warning)
+        .collect();
+    for lint in &warnings {
+        let subject = lint
+            .subject
+            .as_ref()
+            .map(|s| format!(" [{s}]"))
+            .unwrap_or_default();
+        eprintln!("policy lint{}: {} ({})", subject, lint.message, lint.rule);
+    }
+    if deny && !warnings.is_empty() {
+        eprintln!(
+            "error: {} policy lint warning(s) and --deny-lints is set; not running the job",
+            warnings.len()
+        );
+        return Ok(Some(ExitCode::FAILURE));
+    }
+    Ok(None)
+}
+
+// --- vault & reversal ----------------------------------------------------
+
+/// Load a policy and derive its vault key.
+fn vault_key_for(policy_path: &Path) -> anyhow::Result<([u8; 32], String)> {
+    let policy_yaml = std::fs::read_to_string(policy_path)
+        .with_context(|| format!("cannot read policy '{}'", policy_path.display()))?;
+    let policy = deident_core::Policy::from_yaml(&policy_yaml)
+        .with_context(|| format!("invalid policy '{}'", policy_path.display()))?;
+    let mut warnings = Vec::new();
+    let secret = deident_core::key::resolve_secret(&policy, &mut warnings)
+        .context("cannot resolve the key material the vault was encrypted with")?;
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
+    Ok((derive_vault_key(&secret, &policy.dataset), policy.dataset))
+}
+
+fn load_vault(vault_path: &Path, policy_path: &Path) -> anyhow::Result<Vec<MappingEntry>> {
+    let (key, _dataset) = vault_key_for(policy_path)?;
+    let file = std::fs::File::open(vault_path)
+        .with_context(|| format!("cannot open vault '{}'", vault_path.display()))?;
+    read_vault(std::io::BufReader::new(file), &key)
+        .with_context(|| format!("cannot read vault '{}'", vault_path.display()))
+}
+
+fn run_vault(args: &VaultArgs) -> anyhow::Result<ExitCode> {
+    match &args.command {
+        VaultCommand::Export(args) => {
+            let entries = load_vault(&args.vault, &args.policy)?;
+            let mut writer: Box<dyn std::io::Write> = match &args.out {
+                Some(path) => Box::new(std::io::BufWriter::new(
+                    std::fs::File::create(path)
+                        .with_context(|| format!("cannot create '{}'", path.display()))?,
+                )),
+                None => Box::new(std::io::stdout().lock()),
+            };
+            let mut csv = csv::Writer::from_writer(&mut writer);
+            csv.write_record(["domain", "token", "original"])?;
+            for entry in &entries {
+                csv.write_record([&entry.field, &entry.token, &entry.original])?;
+            }
+            csv.flush()?;
+            drop(csv);
+            if let Some(path) = &args.out {
+                eprintln!(
+                    "Exported {} mapping(s) to {} — this file is re-identification material.",
+                    entries.len(),
+                    path.display()
+                );
+            }
+            Ok(ExitCode::SUCCESS)
         }
     }
 }
 
+fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
+    let entries = load_vault(&args.vault, &args.policy)?;
+    // token -> original. Tokens are unique per value, so collisions across
+    // domains would mean a hash collision; last write wins either way.
+    let lookup: std::collections::HashMap<&str, &str> = entries
+        .iter()
+        .map(|e| (e.token.as_str(), e.original.as_str()))
+        .collect();
+
+    let input_format = deident_core::Format::for_path(&path_to_string(&args.input)?)?;
+    let output_format = deident_core::Format::for_path(&path_to_string(&args.out)?)?;
+    let input = std::io::BufReader::new(
+        std::fs::File::open(&args.input)
+            .with_context(|| format!("cannot open input '{}'", args.input.display()))?,
+    );
+    let output = std::io::BufWriter::new(
+        std::fs::File::create(&args.out)
+            .with_context(|| format!("cannot create output '{}'", args.out.display()))?,
+    );
+
+    let mut reader = deident_core::format::reader(input_format, input)?;
+    let mut writer = deident_core::format::writer(output_format, output)?;
+    let headers = reader.headers()?;
+    writer.write_headers(&headers)?;
+
+    let mut rows = 0u64;
+    let mut restored = 0u64;
+    while let Some(row) = reader.next_row()? {
+        let restored_row: Vec<String> = row
+            .into_iter()
+            .map(|cell| match lookup.get(cell.as_str()) {
+                Some(original) => {
+                    restored += 1;
+                    (*original).to_string()
+                }
+                None => cell,
+            })
+            .collect();
+        writer.write_row(&restored_row)?;
+        rows += 1;
+    }
+    writer.finish()?;
+
+    println!(
+        "Reversed {restored} value(s) across {rows} row(s) using {} mapping(s) -> {}",
+        entries.len(),
+        args.out.display()
+    );
+    println!("  note: the output contains original personal data again");
+    Ok(ExitCode::SUCCESS)
+}
+
+// --- engines -------------------------------------------------------------
+
 fn build_engine(args: &EngineArgs) -> anyhow::Result<Box<dyn Engine>> {
+    let limits = WasmLimits {
+        max_memory_bytes: args.max_memory_mib * 1024 * 1024,
+        timeout: std::time::Duration::from_secs(args.timeout_secs),
+        fuel: match (args.no_fuel, args.fuel) {
+            (true, _) => FuelPolicy::Unmetered,
+            (false, Some(fuel)) => FuelPolicy::Fixed(fuel),
+            (false, None) => FuelPolicy::Scaled,
+        },
+    };
     match args.engine {
         EngineKind::Native => Ok(Box::new(NativeEngine)),
         EngineKind::Wasm => {
-            let worker = resolve_worker_module(args.worker.as_deref())?;
-            let limits = WasmLimits {
-                max_memory_bytes: args.max_memory_mib * 1024 * 1024,
-                timeout: std::time::Duration::from_secs(args.timeout_secs),
-                ..WasmLimits::default()
-            };
+            let worker = resolve_worker_module(args.worker.as_deref())
+                .context("--engine wasm was requested but no worker module was found")?;
             Ok(Box::new(WasmEngine::from_file(&worker, limits)?))
         }
+        EngineKind::Auto => match resolve_worker_module(args.worker.as_deref()) {
+            Ok(worker) => Ok(Box::new(WasmEngine::from_file(&worker, limits)?)),
+            Err(err) => {
+                eprintln!(
+                    "warning: running in-process without sandbox isolation ({err}); \
+                     pass --engine wasm to require the sandbox"
+                );
+                Ok(Box::new(NativeEngine))
+            }
+        },
     }
 }
 
@@ -256,7 +566,7 @@ fn resolve_worker_module(flag: Option<&Path>) -> anyhow::Result<PathBuf> {
         }
     }
     anyhow::bail!(
-        "cannot find the worker module (looked at: {}); build it with \
+        "no worker module found (looked at: {}); build it with \
          `cargo build -p deident-worker --target wasm32-wasip1 --release` \
          or point --worker / $DEIDENT_WORKER_WASM at it",
         candidates
@@ -266,6 +576,8 @@ fn resolve_worker_module(flag: Option<&Path>) -> anyhow::Result<PathBuf> {
             .join(", ")
     )
 }
+
+// --- output --------------------------------------------------------------
 
 fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {
     let mode_label = match mode {
@@ -306,6 +618,9 @@ fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {
     println!("  output: {}", args.out.display());
     if let Some(report_path) = &args.report {
         println!("  report: {}", report_path.display());
+    }
+    if let Some(vault_path) = &args.vault {
+        println!("  vault: {}", vault_path.display());
     }
     if mode == Mode::Pseudonymize {
         println!(

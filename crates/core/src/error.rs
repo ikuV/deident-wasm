@@ -15,4 +15,6 @@ pub enum CoreError {
     Io(#[from] std::io::Error),
     #[error("vault error: {0}")]
     Vault(String),
+    #[error("format error: {0}")]
+    Format(String),
 }

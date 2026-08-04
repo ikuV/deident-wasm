@@ -47,6 +47,7 @@ fn request(mode: Mode, dir: &Path, with_report: bool) -> JobRequest {
         input_path: example("data/patients.csv"),
         output_path: dir.join("out.csv").to_str().unwrap().to_string(),
         report_path: with_report.then(|| dir.join("report.json").to_str().unwrap().to_string()),
+        vault_path: None,
     }
 }
 
@@ -129,6 +130,7 @@ fn guest_cannot_read_outside_preopened_workspace() {
             input_path: escape.clone(),
             output_path: "/job/output.csv".to_string(),
             report_path: None,
+            vault_path: None,
         };
         std::fs::write(
             workspace.join("request.json"),
@@ -159,7 +161,7 @@ fn memory_limit_is_enforced() {
     let limits = WasmLimits {
         max_memory_bytes: 64 * 1024, // far below what the worker needs
         timeout: Duration::from_secs(30),
-        fuel: None,
+        fuel: deident_host::wasm::FuelPolicy::Unmetered,
     };
     let engine = wasm_engine(limits, tmp.path());
     let response = engine.run(&request(Mode::Anonymize, tmp.path(), false)).unwrap();

@@ -10,13 +10,20 @@
 
 pub mod engine;
 pub mod error;
+pub mod format;
+#[cfg(feature = "parquet")]
+pub mod format_parquet;
 pub mod key;
+pub mod lint;
+pub mod mock;
 pub mod policy;
 pub mod report;
 pub mod runner;
 pub mod transform;
 pub mod vault;
 
-pub use engine::run_csv_job;
+pub use engine::{run_csv_job, run_job};
 pub use error::CoreError;
+pub use format::Format;
+pub use lint::{Lint, LintLevel, lint};
 pub use policy::Policy;
