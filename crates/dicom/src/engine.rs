@@ -226,8 +226,11 @@ fn deidentify_with_cache(
     let resolved = policy.resolve()?;
     let needs_key = policy.tags.iter().any(|r| r.action.needs_key())
         || resolved.explicit_tags().any(|(_, a)| a.needs_key())
-        || policy.structural.uids
-        || policy.patterns.iter().any(|p| p.action.needs_key());
+        // Only when the structural layer is actually active: consulting it
+        // unconditionally made `profile: none` resolve a key and emit a
+        // "values are reversible" warning for a run that pseudonymized nothing.
+        || (resolved.structural_enabled() && policy.structural.uids)
+        || policy.effective_patterns().iter().any(|p| p.action.needs_key());
     let dataset_key = if needs_key {
         let secret = resolve_secret(policy)?;
         Some(deident_core::key::derive_dataset_key(
@@ -552,7 +555,14 @@ fn apply_action(
             let Some(original) = text else {
                 return Ok(Applied::Unchanged);
             };
-            if original.is_empty() || ctx.patterns.is_empty() {
+            if original.is_empty() {
+                return Ok(Applied::Unchanged);
+            }
+            if ctx.patterns.is_empty() {
+                // No rules at all is the WORST case, not a reason to stay quiet:
+                // `profile: basic` marks ~12 free-text attributes `clean_text`,
+                // so a policy with no `patterns:` ships them all untouched.
+                ctx.text_unchanged.push(keyword.clone());
                 return Ok(Applied::Unchanged);
             }
             let cleaned = clean_text(&original, ctx, &keyword)?;

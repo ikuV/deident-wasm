@@ -112,6 +112,21 @@ enum ColumnType {
     Text,
 }
 
+/// Whether a value is a digit string that `i64` cannot represent *exactly*.
+///
+/// Two cases matter, and both are identifiers rather than quantities:
+/// a 20-digit account number (does not fit) and a zero-padded code like `01234`
+/// (fits, but loses its padding). Either would otherwise parse as `f64` and turn
+/// the whole column into `Float64`, rewriting `99999999999999999999` as `1e20`
+/// and its sibling `12` as `12.0`. Binary floating point is the wrong home for an
+/// identifier, so these fall back to text.
+fn is_inexact_digit_string(value: &str) -> bool {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && !value.parse::<i64>().is_ok_and(|n| n.to_string() == value)
+}
+
 /// Cell at `index`, or an empty string for short rows.
 fn cell_at(row: &[String], index: usize) -> &str {
     row.get(index).map(String::as_str).unwrap_or("")
@@ -124,9 +139,11 @@ fn infer_column_type<'a>(values: impl Iterator<Item = &'a str>) -> ColumnType {
         if value.is_empty() {
             continue;
         }
-        let this = if value.parse::<i64>().is_ok() {
+        let this = if value.parse::<i64>().is_ok_and(|n| n.to_string() == value) {
             ColumnType::Int
-        } else if value.parse::<f64>().is_ok_and(f64::is_finite) {
+        } else if value.parse::<f64>().is_ok_and(f64::is_finite)
+            && !is_inexact_digit_string(value)
+        {
             ColumnType::Float
         } else if value == "true" || value == "false" {
             ColumnType::Bool
@@ -277,6 +294,25 @@ mod tests {
             ["P2", "52", "80.0", "false", "50-59"]
         );
         assert!(reader.next_row().unwrap().is_none());
+    }
+
+    /// Identifiers must never be routed through binary floating point, and a
+    /// zero-padded value must keep its padding.
+    #[test]
+    fn oversized_and_padded_numbers_stay_text() {
+        assert_eq!(
+            infer_column_type(["99999999999999999999", "12"].into_iter()),
+            ColumnType::Text,
+            "a 20-digit account number must not make the column Float64"
+        );
+        assert_eq!(
+            infer_column_type(["01234", "02345"].into_iter()),
+            ColumnType::Text,
+            "zero-padded values are identifiers, not integers"
+        );
+        // Genuine numbers are unaffected.
+        assert_eq!(infer_column_type(["12", "-3"].into_iter()), ColumnType::Int);
+        assert_eq!(infer_column_type(["1.5", "2"].into_iter()), ColumnType::Float);
     }
 
     #[test]

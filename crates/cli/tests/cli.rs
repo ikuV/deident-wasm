@@ -560,3 +560,124 @@ fn reports_and_audit_records_carry_the_tool_version() {
         .success()
         .stdout(predicate::str::contains(expected));
 }
+
+/// Writing the output over the input used to truncate the source before a byte
+/// was read, then report success on the now-empty file. Data loss with exit 0.
+#[test]
+fn refuses_to_write_output_over_the_input() {
+    let tmp = tempfile::tempdir().unwrap();
+    let target = tmp.path().join("data.csv");
+    std::fs::copy(example("data/patients.csv"), &target).unwrap();
+    let original = std::fs::read(&target).unwrap();
+
+    for command in ["pseudonymize", "anonymize"] {
+        deident()
+            .arg(command)
+            .arg(&target)
+            .arg("--policy")
+            .arg(example("policies/patients.yaml"))
+            .arg("--out")
+            .arg(&target)
+            .arg("--engine")
+            .arg("native")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("refusing to write the output over the input"));
+        assert_eq!(
+            std::fs::read(&target).unwrap(),
+            original,
+            "{command}: the source file must be untouched"
+        );
+    }
+
+    // A relative path naming the same file must be caught too.
+    let dir = tmp.path();
+    deident()
+        .current_dir(dir)
+        .arg("anonymize")
+        .arg("./data.csv")
+        .arg("--policy")
+        .arg(example("policies/patients.yaml"))
+        .arg("--out")
+        .arg("data.csv")
+        .arg("--engine")
+        .arg("native")
+        .assert()
+        .failure();
+    assert_eq!(std::fs::read(&target).unwrap(), original);
+}
+
+/// A DICOM vault was write-only: `vault export` parsed only the tabular dialect
+/// and rejected the very policy that produced the vault.
+#[test]
+fn dicom_vault_can_be_exported_with_its_own_policy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let study = tmp.path().join("study");
+    deident_dicom::synthetic::write_study(&study, 1).unwrap();
+    let policy = tmp.path().join("dicom.yaml");
+    std::fs::write(
+        &policy,
+        "version: 1\nkind: dicom\ndataset: vault-dialect-test\n\
+         key: { inline: \"dialect-secret\" }\nprofile: basic\n",
+    )
+    .unwrap();
+    let vault = tmp.path().join("v.jsonl");
+
+    deident()
+        .arg("dicom")
+        .arg(&study)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(tmp.path().join("deid"))
+        .arg("--vault")
+        .arg(&vault)
+        .assert()
+        .success();
+
+    deident()
+        .arg("vault")
+        .arg("export")
+        .arg(&vault)
+        .arg("--policy")
+        .arg(&policy)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dicom:uid"));
+}
+
+/// Chained runs must be lintable: `--deny-lints` was previously unavailable and
+/// no lint output appeared at all for the recommended multi-file path.
+#[test]
+fn chain_runs_policy_lints() {
+    let tmp = tempfile::tempdir().unwrap();
+    let policy = tmp.path().join("risky.yaml");
+    std::fs::write(
+        &policy,
+        "version: 1\ndataset: risky\nkey: { inline: \"s\" }\non_unlisted: keep\n\
+         fields:\n  - { name: patient_id, class: direct_identifier }\n  \
+         - { name: age, class: quasi_identifier }\n",
+    )
+    .unwrap();
+    let manifest = tmp.path().join("chain.yaml");
+    std::fs::write(
+        &manifest,
+        format!(
+            "version: 1\nname: lint-chain\njobs:\n  - name: p\n    input: {}\n    \
+             policy: {}\n    output: out/p.csv\n",
+            example("data/patients.csv").display(),
+            policy.display()
+        ),
+    )
+    .unwrap();
+
+    deident()
+        .arg("chain")
+        .arg(&manifest)
+        .arg("--mode")
+        .arg("anonymize")
+        .arg("--deny-lints")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--deny-lints"));
+}

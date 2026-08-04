@@ -36,6 +36,11 @@ fn run(request: &JobRequest) -> Result<RiskReport, CoreError> {
     let policy = Policy::from_yaml(&request.policy_yaml)?;
     let input_format = Format::for_path(&request.input_path)?;
     let output_format = Format::for_path(&request.output_path)?;
+    // Creating the output truncates it, so writing over the input would destroy
+    // the source before a byte is read — and the job would then "succeed" on an
+    // empty file. Refuse instead, comparing canonical paths so `./a.csv` and
+    // `a.csv` are recognised as the same file.
+    refuse_in_place(&request.input_path, &request.output_path)?;
     let input = BufReader::new(File::open(&request.input_path).map_err(|e| {
         CoreError::Policy(format!("cannot open input '{}': {e}", request.input_path))
     })?);
@@ -45,8 +50,14 @@ fn run(request: &JobRequest) -> Result<RiskReport, CoreError> {
 
     // A vault only makes sense when the job actually produces reversible
     // values (tokens or mocks); otherwise there is nothing to reverse.
+    // Must consider the EXPANDED rule set: a policy whose tokenizing rules come
+    // from `presets` still produces reversible values, and deciding otherwise
+    // silently discards the vault while the report claims none was needed.
     let produces_tokens = request.mode == Mode::Pseudonymize
-        || policy.patterns.iter().any(|p| p.action.needs_key());
+        || policy
+            .effective_patterns()
+            .iter()
+            .any(|p| p.action.needs_key());
     let report = match (&request.vault_path, produces_tokens) {
         (Some(path), true) => {
             let mut key_warnings = Vec::new();
@@ -95,6 +106,38 @@ fn run(request: &JobRequest) -> Result<RiskReport, CoreError> {
         std::fs::write(report_path, json)?;
     }
     Ok(report)
+}
+
+/// Reject an output path that resolves to the input file.
+///
+/// Canonicalizing the input is safe (it exists); the output usually does not, so
+/// its parent directory is canonicalized and the file name appended. If either
+/// path cannot be resolved the check passes — a genuinely broken path will fail
+/// with a clearer error moments later when it is opened.
+pub fn refuse_in_place(input: &str, output: &str) -> Result<(), CoreError> {
+    let input_path = std::path::Path::new(input);
+    let output_path = std::path::Path::new(output);
+    let resolved_input = input_path.canonicalize();
+    let resolved_output = match (output_path.parent(), output_path.file_name()) {
+        (Some(parent), Some(name)) => {
+            let parent = if parent.as_os_str().is_empty() {
+                std::path::Path::new(".")
+            } else {
+                parent
+            };
+            parent.canonicalize().map(|dir| dir.join(name))
+        }
+        _ => return Ok(()),
+    };
+    if let (Ok(input), Ok(output)) = (resolved_input, resolved_output)
+        && input == output
+    {
+        return Err(CoreError::Policy(format!(
+            "refusing to write the output over the input ('{}'): that would destroy the source \
+             data before it is read. Choose a different --out path"
+        , input.display())));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

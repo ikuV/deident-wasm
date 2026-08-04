@@ -113,6 +113,8 @@ struct ChainArgs {
     report: Option<PathBuf>,
 
     #[command(flatten)]
+    lint: LintPolicyArgs,
+    #[command(flatten)]
     engine: EngineArgs,
 }
 
@@ -314,7 +316,35 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
 }
 
 fn run_chain(args: &ChainArgs) -> anyhow::Result<ExitCode> {
-    let engine = build_engine(&args.engine)?;
+    let manifest = deident_host::ChainManifest::from_file(&args.manifest)?;
+    let base = args.manifest.parent().unwrap_or_else(|| Path::new("."));
+
+    // Chained runs are the recommended path for real multi-file exports, so they
+    // must be lintable too — previously `--deny-lints` was unavailable here and
+    // no lint output appeared at all.
+    if !args.lint.no_lint {
+        for job in &manifest.jobs {
+            let policy_path = base.join(&job.policy);
+            if let Ok(policy_yaml) = std::fs::read_to_string(&policy_path)
+                && let Some(code) = preflight_lint(
+                    &policy_yaml,
+                    Some(args.mode.into()),
+                    args.lint.deny_lints,
+                )?
+            {
+                return Ok(code);
+            }
+        }
+    }
+
+    // Parquet is not in the sandbox build, so a chain touching it must run
+    // in-process just as a single job does.
+    let needs_native = manifest.jobs.iter().any(|job| {
+        [&job.input, &job.output]
+            .iter()
+            .any(|p| p.to_str().is_some_and(is_parquet))
+    });
+    let engine = build_engine_for(&args.engine, needs_native)?;
     let audit = args.engine.audit_log.as_ref().map(AuditLog::new);
     let audited;
     let engine: &dyn Engine = match &audit {
@@ -433,15 +463,39 @@ fn preflight_lint(
 fn vault_key_for(policy_path: &Path) -> anyhow::Result<([u8; 32], String)> {
     let policy_yaml = std::fs::read_to_string(policy_path)
         .with_context(|| format!("cannot read policy '{}'", policy_path.display()))?;
-    let policy = deident_core::Policy::from_yaml(&policy_yaml)
-        .with_context(|| format!("invalid policy '{}'", policy_path.display()))?;
+
+    // A vault can be produced by either dialect, so accept either here. Without
+    // this a DICOM vault was write-only: `vault export` and `reverse` rejected
+    // its own policy with "unknown field `kind`".
+    let (dataset, key) = match deident_core::Policy::from_yaml(&policy_yaml) {
+        Ok(tabular) => (tabular.dataset, tabular.key),
+        Err(tabular_err) => match deident_dicom::DicomPolicy::from_yaml(&policy_yaml) {
+            Ok(dicom) => (dicom.dataset, dicom.key),
+            Err(dicom_err) => anyhow::bail!(
+                "'{}' is not a valid policy in either dialect.\n  tabular: {tabular_err}\n  dicom: {dicom_err}",
+                policy_path.display()
+            ),
+        },
+    };
+
+    // Key resolution only needs the dataset and key source; borrow the tabular
+    // model as the carrier for both dialects.
+    let probe = deident_core::Policy {
+        version: 1,
+        dataset: dataset.clone(),
+        key,
+        on_unlisted: Default::default(),
+        fields: Vec::new(),
+        patterns: Vec::new(),
+        presets: Vec::new(),
+    };
     let mut warnings = Vec::new();
-    let secret = deident_core::key::resolve_secret(&policy, &mut warnings)
+    let secret = deident_core::key::resolve_secret(&probe, &mut warnings)
         .context("cannot resolve the key material the vault was encrypted with")?;
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
-    Ok((derive_vault_key(&secret, &policy.dataset), policy.dataset))
+    Ok((derive_vault_key(&secret, &dataset), dataset))
 }
 
 fn load_vault(vault_path: &Path, policy_path: &Path) -> anyhow::Result<Vec<MappingEntry>> {
@@ -500,8 +554,12 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
     // token that contains it.
     embedded.sort_by_key(|(token, _)| std::cmp::Reverse(token.len()));
 
-    let input_format = deident_core::Format::for_path(&path_to_string(&args.input)?)?;
-    let output_format = deident_core::Format::for_path(&path_to_string(&args.out)?)?;
+    let input_path = path_to_string(&args.input)?;
+    let output_path = path_to_string(&args.out)?;
+    // Same hazard as a transformation job: creating the output truncates it.
+    deident_core::runner::refuse_in_place(&input_path, &output_path)?;
+    let input_format = deident_core::Format::for_path(&input_path)?;
+    let output_format = deident_core::Format::for_path(&output_path)?;
     let input = std::io::BufReader::new(
         std::fs::File::open(&args.input)
             .with_context(|| format!("cannot open input '{}'", args.input.display()))?,
@@ -649,10 +707,6 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()>
 fn is_parquet(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     lower.ends_with(".parquet") || lower.ends_with(".pq")
-}
-
-fn build_engine(args: &EngineArgs) -> anyhow::Result<Box<dyn Engine>> {
-    build_engine_for(args, false)
 }
 
 /// Build the requested engine. `needs_native` forces in-process execution in

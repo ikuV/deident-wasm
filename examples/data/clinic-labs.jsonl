@@ -1,0 +1,697 @@
+{"lab_id":"L0000001","patient_ref":"P000001","sample_code":"08794","hba1c":6.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000003","patient_ref":"P000003","sample_code":"07708","hba1c":10.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000010","patient_ref":"P000010","sample_code":"49370","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000012","patient_ref":"P000012","sample_code":"66729","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000013","patient_ref":"P000013","sample_code":"96416","hba1c":11.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000014","patient_ref":"P000014","sample_code":"33079","hba1c":4.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000015","patient_ref":"P000015","sample_code":"95740","hba1c":4.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000016","patient_ref":"P000016","sample_code":"83033","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000019","patient_ref":"P000019","sample_code":"80080","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000020","patient_ref":"P000020","sample_code":"08939","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000021","patient_ref":"P000021","sample_code":"80731","hba1c":12.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000023","patient_ref":"P000023","sample_code":"74969","hba1c":4.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000025","patient_ref":"P000025","sample_code":"12838","hba1c":8.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000026","patient_ref":"P000026","sample_code":"15877","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000027","patient_ref":"P000027","sample_code":"91821","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000029","patient_ref":"P000029","sample_code":"84572","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000030","patient_ref":"P000030","sample_code":"41973","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000031","patient_ref":"P000031","sample_code":"10517","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000032","patient_ref":"P000032","sample_code":"89077","hba1c":6.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000033","patient_ref":"P000033","sample_code":"64668","hba1c":12.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000034","patient_ref":"P000034","sample_code":"71884","hba1c":4.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000035","patient_ref":"P000035","sample_code":"52081","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000036","patient_ref":"P000036","sample_code":"15870","hba1c":9.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000037","patient_ref":"P000037","sample_code":"77682","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000042","patient_ref":"P000042","sample_code":"10279","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000043","patient_ref":"P000043","sample_code":"99076","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000044","patient_ref":"P000044","sample_code":"47617","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000045","patient_ref":"P000045","sample_code":"87399","hba1c":12.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000047","patient_ref":"P000047","sample_code":"40921","hba1c":12.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000048","patient_ref":"P000048","sample_code":"51662","hba1c":5.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000049","patient_ref":"P000049","sample_code":"90908","hba1c":4.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000050","patient_ref":"P000050","sample_code":"87593","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000051","patient_ref":"P000051","sample_code":"81963","hba1c":11.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000054","patient_ref":"P000054","sample_code":"59393","hba1c":4.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000055","patient_ref":"P000055","sample_code":"35775","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000057","patient_ref":"P000057","sample_code":"38343","hba1c":6.9,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000058","patient_ref":"P000058","sample_code":"82092","hba1c":6.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000059","patient_ref":"P000059","sample_code":"95880","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000060","patient_ref":"P000060","sample_code":"01894","hba1c":5.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000062","patient_ref":"P000062","sample_code":"99038","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000063","patient_ref":"P000063","sample_code":"90024","hba1c":8.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000064","patient_ref":"P000064","sample_code":"29861","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000065","patient_ref":"P000065","sample_code":"25997","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000066","patient_ref":"P000066","sample_code":"04658","hba1c":8.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000068","patient_ref":"P000068","sample_code":"75465","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000069","patient_ref":"P000069","sample_code":"88073","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000070","patient_ref":"P000070","sample_code":"61944","hba1c":7.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000071","patient_ref":"P000071","sample_code":"30832","hba1c":5.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000072","patient_ref":"P000072","sample_code":"62301","hba1c":7.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000074","patient_ref":"P000074","sample_code":"83198","hba1c":11.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000076","patient_ref":"P000076","sample_code":"49985","hba1c":5.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000077","patient_ref":"P000077","sample_code":"46619","hba1c":11.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000078","patient_ref":"P000078","sample_code":"40408","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000079","patient_ref":"P000079","sample_code":"38570","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000080","patient_ref":"P000080","sample_code":"91171","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000081","patient_ref":"P000081","sample_code":"87294","hba1c":11.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000083","patient_ref":"P000083","sample_code":"78399","hba1c":6.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000084","patient_ref":"P000084","sample_code":"43054","hba1c":6.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000085","patient_ref":"P000085","sample_code":"09507","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000086","patient_ref":"P000086","sample_code":"47649","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000087","patient_ref":"P000087","sample_code":"12938","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000088","patient_ref":"P000088","sample_code":"55687","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000089","patient_ref":"P000089","sample_code":"60843","hba1c":9.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000090","patient_ref":"P000090","sample_code":"41012","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000092","patient_ref":"P000092","sample_code":"87635","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000093","patient_ref":"P000093","sample_code":"71432","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000094","patient_ref":"P000094","sample_code":"78335","hba1c":10.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000095","patient_ref":"P000095","sample_code":"27957","hba1c":6.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000096","patient_ref":"P000096","sample_code":"15021","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000097","patient_ref":"P000097","sample_code":"60501","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000098","patient_ref":"P000098","sample_code":"48201","hba1c":10.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000099","patient_ref":"P000099","sample_code":"21211","hba1c":6.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000101","patient_ref":"P000101","sample_code":"37120","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000102","patient_ref":"P000102","sample_code":"32744","hba1c":8.3,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000106","patient_ref":"P000106","sample_code":"05205","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000108","patient_ref":"P000108","sample_code":"18838","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000109","patient_ref":"P000109","sample_code":"63669","hba1c":11.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000113","patient_ref":"P000113","sample_code":"88717","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000114","patient_ref":"P000114","sample_code":"06011","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000116","patient_ref":"P000116","sample_code":"63901","hba1c":5.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000117","patient_ref":"P000117","sample_code":"55993","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000120","patient_ref":"P000120","sample_code":"99525","hba1c":12.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000122","patient_ref":"P000122","sample_code":"91137","hba1c":9.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000123","patient_ref":"P000123","sample_code":"67732","hba1c":12.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000125","patient_ref":"P000125","sample_code":"80227","hba1c":9.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000126","patient_ref":"P000126","sample_code":"93961","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000127","patient_ref":"P000127","sample_code":"11645","hba1c":12.9,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000128","patient_ref":"P000128","sample_code":"66715","hba1c":5.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000132","patient_ref":"P000132","sample_code":"08208","hba1c":11.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000134","patient_ref":"P000134","sample_code":"65587","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000136","patient_ref":"P000136","sample_code":"43806","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000138","patient_ref":"P000138","sample_code":"02951","hba1c":8.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000139","patient_ref":"P000139","sample_code":"38083","hba1c":12.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000142","patient_ref":"P000142","sample_code":"22786","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000144","patient_ref":"P000144","sample_code":"80229","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000148","patient_ref":"P000148","sample_code":"05126","hba1c":9.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000149","patient_ref":"P000149","sample_code":"83482","hba1c":11.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000150","patient_ref":"P000150","sample_code":"66949","hba1c":10.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000151","patient_ref":"P000151","sample_code":"89403","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000152","patient_ref":"P000152","sample_code":"91094","hba1c":8.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000153","patient_ref":"P000153","sample_code":"86539","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000154","patient_ref":"P000154","sample_code":"74931","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000155","patient_ref":"P000155","sample_code":"51184","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000156","patient_ref":"P000156","sample_code":"49828","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000157","patient_ref":"P000157","sample_code":"50622","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000158","patient_ref":"P000158","sample_code":"86385","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000159","patient_ref":"P000159","sample_code":"40181","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000160","patient_ref":"P000160","sample_code":"61599","hba1c":11.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000161","patient_ref":"P000161","sample_code":"62630","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000163","patient_ref":"P000163","sample_code":"56529","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000165","patient_ref":"P000165","sample_code":"94077","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000167","patient_ref":"P000167","sample_code":"59669","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000170","patient_ref":"P000170","sample_code":"92414","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000172","patient_ref":"P000172","sample_code":"88439","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000173","patient_ref":"P000173","sample_code":"35152","hba1c":10.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000174","patient_ref":"P000174","sample_code":"19441","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000176","patient_ref":"P000176","sample_code":"94104","hba1c":6.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000177","patient_ref":"P000177","sample_code":"66877","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000178","patient_ref":"P000178","sample_code":"98132","hba1c":4.8,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000182","patient_ref":"P000182","sample_code":"01314","hba1c":8.6,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000183","patient_ref":"P000183","sample_code":"18571","hba1c":11.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000184","patient_ref":"P000184","sample_code":"38527","hba1c":11.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000185","patient_ref":"P000185","sample_code":"03595","hba1c":12.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000187","patient_ref":"P000187","sample_code":"55598","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000188","patient_ref":"P000188","sample_code":"76269","hba1c":4.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000190","patient_ref":"P000190","sample_code":"25025","hba1c":6.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000192","patient_ref":"P000192","sample_code":"95944","hba1c":6.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000193","patient_ref":"P000193","sample_code":"31682","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000195","patient_ref":"P000195","sample_code":"44066","hba1c":11.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000196","patient_ref":"P000196","sample_code":"55737","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000198","patient_ref":"P000198","sample_code":"45395","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000199","patient_ref":"P000199","sample_code":"90008","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000200","patient_ref":"P000200","sample_code":"20305","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000201","patient_ref":"P000201","sample_code":"22928","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000202","patient_ref":"P000202","sample_code":"32274","hba1c":6.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000203","patient_ref":"P000203","sample_code":"89396","hba1c":7.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000207","patient_ref":"P000207","sample_code":"12421","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000208","patient_ref":"P000208","sample_code":"84380","hba1c":10.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000209","patient_ref":"P000209","sample_code":"27010","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000210","patient_ref":"P000210","sample_code":"53578","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000211","patient_ref":"P000211","sample_code":"46536","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000212","patient_ref":"P000212","sample_code":"61670","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000213","patient_ref":"P000213","sample_code":"73264","hba1c":7.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000214","patient_ref":"P000214","sample_code":"68809","hba1c":10.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000215","patient_ref":"P000215","sample_code":"40797","hba1c":12.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000217","patient_ref":"P000217","sample_code":"34924","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000218","patient_ref":"P000218","sample_code":"30752","hba1c":6.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000219","patient_ref":"P000219","sample_code":"53543","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000221","patient_ref":"P000221","sample_code":"81575","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000222","patient_ref":"P000222","sample_code":"91439","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000224","patient_ref":"P000224","sample_code":"94591","hba1c":11.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000225","patient_ref":"P000225","sample_code":"99695","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000226","patient_ref":"P000226","sample_code":"72163","hba1c":4.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000227","patient_ref":"P000227","sample_code":"36060","hba1c":7.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000228","patient_ref":"P000228","sample_code":"61678","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000230","patient_ref":"P000230","sample_code":"50566","hba1c":11.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000232","patient_ref":"P000232","sample_code":"88165","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000233","patient_ref":"P000233","sample_code":"34088","hba1c":7.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000234","patient_ref":"P000234","sample_code":"53755","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000235","patient_ref":"P000235","sample_code":"72800","hba1c":10.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000236","patient_ref":"P000236","sample_code":"08994","hba1c":9.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000237","patient_ref":"P000237","sample_code":"49439","hba1c":7.1,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000238","patient_ref":"P000238","sample_code":"97106","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000240","patient_ref":"P000240","sample_code":"06714","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000244","patient_ref":"P000244","sample_code":"84079","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000245","patient_ref":"P000245","sample_code":"13272","hba1c":6.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000246","patient_ref":"P000246","sample_code":"32822","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000247","patient_ref":"P000247","sample_code":"91905","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000248","patient_ref":"P000248","sample_code":"59207","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000250","patient_ref":"P000250","sample_code":"42615","hba1c":11.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000252","patient_ref":"P000252","sample_code":"27016","hba1c":8.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000256","patient_ref":"P000256","sample_code":"88505","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000257","patient_ref":"P000257","sample_code":"31239","hba1c":8.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000258","patient_ref":"P000258","sample_code":"88822","hba1c":10.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000259","patient_ref":"P000259","sample_code":"75158","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000260","patient_ref":"P000260","sample_code":"65735","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000261","patient_ref":"P000261","sample_code":"91451","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000262","patient_ref":"P000262","sample_code":"11981","hba1c":12.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000264","patient_ref":"P000264","sample_code":"89788","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000265","patient_ref":"P000265","sample_code":"91112","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000267","patient_ref":"P000267","sample_code":"07720","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000268","patient_ref":"P000268","sample_code":"93482","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000269","patient_ref":"P000269","sample_code":"53253","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000270","patient_ref":"P000270","sample_code":"12806","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000271","patient_ref":"P000271","sample_code":"58335","hba1c":7.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000273","patient_ref":"P000273","sample_code":"03850","hba1c":6.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000274","patient_ref":"P000274","sample_code":"82792","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000275","patient_ref":"P000275","sample_code":"76249","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000276","patient_ref":"P000276","sample_code":"08278","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000278","patient_ref":"P000278","sample_code":"26815","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000279","patient_ref":"P000279","sample_code":"26983","hba1c":5.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000280","patient_ref":"P000280","sample_code":"51851","hba1c":11.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000281","patient_ref":"P000281","sample_code":"48176","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000282","patient_ref":"P000282","sample_code":"35441","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000283","patient_ref":"P000283","sample_code":"82982","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000289","patient_ref":"P000289","sample_code":"11855","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000290","patient_ref":"P000290","sample_code":"29270","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000292","patient_ref":"P000292","sample_code":"41874","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000293","patient_ref":"P000293","sample_code":"63198","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000295","patient_ref":"P000295","sample_code":"52676","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000296","patient_ref":"P000296","sample_code":"20412","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000299","patient_ref":"P000299","sample_code":"83488","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000300","patient_ref":"P000300","sample_code":"31324","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000301","patient_ref":"P000301","sample_code":"38950","hba1c":5.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000303","patient_ref":"P000303","sample_code":"62663","hba1c":9.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000304","patient_ref":"P000304","sample_code":"24446","hba1c":9.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000305","patient_ref":"P000305","sample_code":"21313","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000306","patient_ref":"P000306","sample_code":"19886","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000307","patient_ref":"P000307","sample_code":"71149","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000310","patient_ref":"P000310","sample_code":"82343","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000311","patient_ref":"P000311","sample_code":"36960","hba1c":11.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000314","patient_ref":"P000314","sample_code":"79376","hba1c":8.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000315","patient_ref":"P000315","sample_code":"51038","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000317","patient_ref":"P000317","sample_code":"59498","hba1c":12.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000320","patient_ref":"P000320","sample_code":"87274","hba1c":10.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000321","patient_ref":"P000321","sample_code":"88275","hba1c":9.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000322","patient_ref":"P000322","sample_code":"20262","hba1c":7.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000323","patient_ref":"P000323","sample_code":"49305","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000324","patient_ref":"P000324","sample_code":"61542","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000325","patient_ref":"P000325","sample_code":"23020","hba1c":6.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000326","patient_ref":"P000326","sample_code":"37817","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000328","patient_ref":"P000328","sample_code":"63171","hba1c":10.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000330","patient_ref":"P000330","sample_code":"24360","hba1c":9.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000331","patient_ref":"P000331","sample_code":"12262","hba1c":12.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000332","patient_ref":"P000332","sample_code":"92019","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000333","patient_ref":"P000333","sample_code":"57633","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000335","patient_ref":"P000335","sample_code":"84142","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000336","patient_ref":"P000336","sample_code":"75514","hba1c":6.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000337","patient_ref":"P000337","sample_code":"65906","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000340","patient_ref":"P000340","sample_code":"48293","hba1c":8.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000344","patient_ref":"P000344","sample_code":"02263","hba1c":9.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000345","patient_ref":"P000345","sample_code":"55420","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000346","patient_ref":"P000346","sample_code":"01595","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000347","patient_ref":"P000347","sample_code":"79877","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000348","patient_ref":"P000348","sample_code":"49708","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000349","patient_ref":"P000349","sample_code":"69648","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000350","patient_ref":"P000350","sample_code":"77215","hba1c":12.2,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000351","patient_ref":"P000351","sample_code":"26115","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000353","patient_ref":"P000353","sample_code":"10396","hba1c":5.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000354","patient_ref":"P000354","sample_code":"34941","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000356","patient_ref":"P000356","sample_code":"71779","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000358","patient_ref":"P000358","sample_code":"93706","hba1c":6.9,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000359","patient_ref":"P000359","sample_code":"14781","hba1c":6.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000360","patient_ref":"P000360","sample_code":"37000","hba1c":8.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000361","patient_ref":"P000361","sample_code":"89194","hba1c":6.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000362","patient_ref":"P000362","sample_code":"16462","hba1c":12.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000363","patient_ref":"P000363","sample_code":"58919","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000364","patient_ref":"P000364","sample_code":"28156","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000365","patient_ref":"P000365","sample_code":"63188","hba1c":8.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000366","patient_ref":"P000366","sample_code":"45133","hba1c":4.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000368","patient_ref":"P000368","sample_code":"03242","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000369","patient_ref":"P000369","sample_code":"48287","hba1c":12.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000370","patient_ref":"P000370","sample_code":"80665","hba1c":12.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000371","patient_ref":"P000371","sample_code":"93597","hba1c":11.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000372","patient_ref":"P000372","sample_code":"44106","hba1c":11.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000373","patient_ref":"P000373","sample_code":"85935","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000374","patient_ref":"P000374","sample_code":"56905","hba1c":12.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000376","patient_ref":"P000376","sample_code":"44644","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000378","patient_ref":"P000378","sample_code":"93416","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000380","patient_ref":"P000380","sample_code":"07246","hba1c":8.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000381","patient_ref":"P000381","sample_code":"55738","hba1c":12.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000382","patient_ref":"P000382","sample_code":"35705","hba1c":12.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000383","patient_ref":"P000383","sample_code":"83113","hba1c":8.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000384","patient_ref":"P000384","sample_code":"53419","hba1c":9.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000385","patient_ref":"P000385","sample_code":"41460","hba1c":12.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000386","patient_ref":"P000386","sample_code":"02552","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000387","patient_ref":"P000387","sample_code":"82868","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000389","patient_ref":"P000389","sample_code":"56256","hba1c":11.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000391","patient_ref":"P000391","sample_code":"59815","hba1c":10.0,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000392","patient_ref":"P000392","sample_code":"91872","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000393","patient_ref":"P000393","sample_code":"51983","hba1c":7.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000394","patient_ref":"P000394","sample_code":"16769","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000395","patient_ref":"P000395","sample_code":"79695","hba1c":7.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000396","patient_ref":"P000396","sample_code":"28693","hba1c":9.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000397","patient_ref":"P000397","sample_code":"35919","hba1c":10.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000398","patient_ref":"P000398","sample_code":"05038","hba1c":11.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000399","patient_ref":"P000399","sample_code":"60208","hba1c":11.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000401","patient_ref":"P000401","sample_code":"34125","hba1c":8.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000402","patient_ref":"P000402","sample_code":"31137","hba1c":5.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000403","patient_ref":"P000403","sample_code":"05521","hba1c":7.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000405","patient_ref":"P000405","sample_code":"30441","hba1c":7.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000408","patient_ref":"P000408","sample_code":"36892","hba1c":11.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000409","patient_ref":"P000409","sample_code":"55240","hba1c":10.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000410","patient_ref":"P000410","sample_code":"82996","hba1c":9.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000412","patient_ref":"P000412","sample_code":"44733","hba1c":12.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000413","patient_ref":"P000413","sample_code":"46751","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000414","patient_ref":"P000414","sample_code":"66476","hba1c":12.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000416","patient_ref":"P000416","sample_code":"95361","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000417","patient_ref":"P000417","sample_code":"91305","hba1c":8.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000418","patient_ref":"P000418","sample_code":"87014","hba1c":6.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000421","patient_ref":"P000421","sample_code":"97787","hba1c":4.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000422","patient_ref":"P000422","sample_code":"97399","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000423","patient_ref":"P000423","sample_code":"16203","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000424","patient_ref":"P000424","sample_code":"92584","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000429","patient_ref":"P000429","sample_code":"62888","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000430","patient_ref":"P000430","sample_code":"06997","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000431","patient_ref":"P000431","sample_code":"12279","hba1c":4.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000432","patient_ref":"P000432","sample_code":"46945","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000433","patient_ref":"P000433","sample_code":"00830","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000434","patient_ref":"P000434","sample_code":"28018","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000436","patient_ref":"P000436","sample_code":"74246","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000437","patient_ref":"P000437","sample_code":"25635","hba1c":12.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000438","patient_ref":"P000438","sample_code":"90925","hba1c":4.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000439","patient_ref":"P000439","sample_code":"92728","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000441","patient_ref":"P000441","sample_code":"37577","hba1c":8.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000444","patient_ref":"P000444","sample_code":"06576","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000445","patient_ref":"P000445","sample_code":"73787","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000446","patient_ref":"P000446","sample_code":"84715","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000448","patient_ref":"P000448","sample_code":"47952","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000449","patient_ref":"P000449","sample_code":"67870","hba1c":12.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000450","patient_ref":"P000450","sample_code":"63779","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000452","patient_ref":"P000452","sample_code":"94289","hba1c":12.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000453","patient_ref":"P000453","sample_code":"91946","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000454","patient_ref":"P000454","sample_code":"08067","hba1c":5.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000455","patient_ref":"P000455","sample_code":"76733","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000456","patient_ref":"P000456","sample_code":"03534","hba1c":6.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000457","patient_ref":"P000457","sample_code":"66801","hba1c":5.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000458","patient_ref":"P000458","sample_code":"73195","hba1c":7.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000459","patient_ref":"P000459","sample_code":"99520","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000465","patient_ref":"P000465","sample_code":"01168","hba1c":10.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000466","patient_ref":"P000466","sample_code":"32098","hba1c":10.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000468","patient_ref":"P000468","sample_code":"69615","hba1c":10.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000469","patient_ref":"P000469","sample_code":"16496","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000470","patient_ref":"P000470","sample_code":"13432","hba1c":6.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000471","patient_ref":"P000471","sample_code":"14984","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000472","patient_ref":"P000472","sample_code":"58545","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000473","patient_ref":"P000473","sample_code":"37536","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000475","patient_ref":"P000475","sample_code":"47748","hba1c":12.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000478","patient_ref":"P000478","sample_code":"55844","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000479","patient_ref":"P000479","sample_code":"14258","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000482","patient_ref":"P000482","sample_code":"90811","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000483","patient_ref":"P000483","sample_code":"90869","hba1c":7.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000485","patient_ref":"P000485","sample_code":"25809","hba1c":6.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000487","patient_ref":"P000487","sample_code":"36343","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000489","patient_ref":"P000489","sample_code":"59468","hba1c":4.1,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000490","patient_ref":"P000490","sample_code":"82749","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000491","patient_ref":"P000491","sample_code":"43533","hba1c":5.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000493","patient_ref":"P000493","sample_code":"83434","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000494","patient_ref":"P000494","sample_code":"23488","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000495","patient_ref":"P000495","sample_code":"72700","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000497","patient_ref":"P000497","sample_code":"96187","hba1c":4.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000498","patient_ref":"P000498","sample_code":"83906","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000499","patient_ref":"P000499","sample_code":"79466","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000500","patient_ref":"P000500","sample_code":"79857","hba1c":4.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000501","patient_ref":"P000501","sample_code":"33437","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000502","patient_ref":"P000502","sample_code":"75654","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000504","patient_ref":"P000504","sample_code":"13858","hba1c":6.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000506","patient_ref":"P000506","sample_code":"17514","hba1c":8.4,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000507","patient_ref":"P000507","sample_code":"54785","hba1c":5.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000510","patient_ref":"P000510","sample_code":"39686","hba1c":5.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000512","patient_ref":"P000512","sample_code":"74433","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000514","patient_ref":"P000514","sample_code":"25818","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000515","patient_ref":"P000515","sample_code":"55807","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000519","patient_ref":"P000519","sample_code":"37045","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000522","patient_ref":"P000522","sample_code":"72736","hba1c":8.9,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000523","patient_ref":"P000523","sample_code":"00129","hba1c":6.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000524","patient_ref":"P000524","sample_code":"34433","hba1c":7.4,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000525","patient_ref":"P000525","sample_code":"66604","hba1c":9.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000526","patient_ref":"P000526","sample_code":"49303","hba1c":7.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000527","patient_ref":"P000527","sample_code":"00900","hba1c":4.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000528","patient_ref":"P000528","sample_code":"92836","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000529","patient_ref":"P000529","sample_code":"76811","hba1c":4.6,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000530","patient_ref":"P000530","sample_code":"59296","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000531","patient_ref":"P000531","sample_code":"66835","hba1c":11.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000532","patient_ref":"P000532","sample_code":"58165","hba1c":5.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000533","patient_ref":"P000533","sample_code":"60391","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000536","patient_ref":"P000536","sample_code":"96250","hba1c":8.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000537","patient_ref":"P000537","sample_code":"45110","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000538","patient_ref":"P000538","sample_code":"65228","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000539","patient_ref":"P000539","sample_code":"80428","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000540","patient_ref":"P000540","sample_code":"52469","hba1c":8.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000541","patient_ref":"P000541","sample_code":"18900","hba1c":12.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000542","patient_ref":"P000542","sample_code":"76000","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000543","patient_ref":"P000543","sample_code":"59762","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000544","patient_ref":"P000544","sample_code":"86963","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000545","patient_ref":"P000545","sample_code":"45030","hba1c":10.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000546","patient_ref":"P000546","sample_code":"65633","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000547","patient_ref":"P000547","sample_code":"53743","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000548","patient_ref":"P000548","sample_code":"03927","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000549","patient_ref":"P000549","sample_code":"88636","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000550","patient_ref":"P000550","sample_code":"21979","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000551","patient_ref":"P000551","sample_code":"55896","hba1c":11.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000552","patient_ref":"P000552","sample_code":"51714","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000553","patient_ref":"P000553","sample_code":"94379","hba1c":11.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000554","patient_ref":"P000554","sample_code":"34462","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000557","patient_ref":"P000557","sample_code":"85013","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000558","patient_ref":"P000558","sample_code":"14958","hba1c":4.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000559","patient_ref":"P000559","sample_code":"77928","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000560","patient_ref":"P000560","sample_code":"71307","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000561","patient_ref":"P000561","sample_code":"89248","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000562","patient_ref":"P000562","sample_code":"99045","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000563","patient_ref":"P000563","sample_code":"59021","hba1c":5.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000564","patient_ref":"P000564","sample_code":"08746","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000565","patient_ref":"P000565","sample_code":"45309","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000566","patient_ref":"P000566","sample_code":"39643","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000567","patient_ref":"P000567","sample_code":"27356","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000568","patient_ref":"P000568","sample_code":"77886","hba1c":12.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000573","patient_ref":"P000573","sample_code":"51309","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000576","patient_ref":"P000576","sample_code":"68573","hba1c":4.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000577","patient_ref":"P000577","sample_code":"23967","hba1c":4.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000578","patient_ref":"P000578","sample_code":"57208","hba1c":7.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000579","patient_ref":"P000579","sample_code":"96534","hba1c":7.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000580","patient_ref":"P000580","sample_code":"97407","hba1c":9.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000581","patient_ref":"P000581","sample_code":"23384","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000582","patient_ref":"P000582","sample_code":"01980","hba1c":5.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000584","patient_ref":"P000584","sample_code":"28502","hba1c":5.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000585","patient_ref":"P000585","sample_code":"49390","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000586","patient_ref":"P000586","sample_code":"82037","hba1c":4.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000588","patient_ref":"P000588","sample_code":"56434","hba1c":6.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000590","patient_ref":"P000590","sample_code":"93181","hba1c":10.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000593","patient_ref":"P000593","sample_code":"03585","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000595","patient_ref":"P000595","sample_code":"04468","hba1c":7.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000596","patient_ref":"P000596","sample_code":"58542","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000597","patient_ref":"P000597","sample_code":"72552","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000599","patient_ref":"P000599","sample_code":"72630","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000600","patient_ref":"P000600","sample_code":"52589","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000601","patient_ref":"P000601","sample_code":"96930","hba1c":11.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000602","patient_ref":"P000602","sample_code":"48207","hba1c":12.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000603","patient_ref":"P000603","sample_code":"27343","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000604","patient_ref":"P000604","sample_code":"11891","hba1c":6.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000605","patient_ref":"P000605","sample_code":"37590","hba1c":8.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000606","patient_ref":"P000606","sample_code":"24850","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000607","patient_ref":"P000607","sample_code":"11895","hba1c":11.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000608","patient_ref":"P000608","sample_code":"68259","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000611","patient_ref":"P000611","sample_code":"12986","hba1c":11.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000612","patient_ref":"P000612","sample_code":"03259","hba1c":8.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000615","patient_ref":"P000615","sample_code":"96909","hba1c":6.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000617","patient_ref":"P000617","sample_code":"33706","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000619","patient_ref":"P000619","sample_code":"08129","hba1c":11.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000620","patient_ref":"P000620","sample_code":"83044","hba1c":11.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000621","patient_ref":"P000621","sample_code":"51792","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000622","patient_ref":"P000622","sample_code":"74312","hba1c":8.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000624","patient_ref":"P000624","sample_code":"81795","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000626","patient_ref":"P000626","sample_code":"08804","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000629","patient_ref":"P000629","sample_code":"48035","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000630","patient_ref":"P000630","sample_code":"63917","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000631","patient_ref":"P000631","sample_code":"60965","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000632","patient_ref":"P000632","sample_code":"64893","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000633","patient_ref":"P000633","sample_code":"58587","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000634","patient_ref":"P000634","sample_code":"89762","hba1c":10.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000635","patient_ref":"P000635","sample_code":"07906","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000637","patient_ref":"P000637","sample_code":"68641","hba1c":11.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000639","patient_ref":"P000639","sample_code":"32096","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000640","patient_ref":"P000640","sample_code":"67309","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000641","patient_ref":"P000641","sample_code":"21048","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000642","patient_ref":"P000642","sample_code":"84498","hba1c":8.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000643","patient_ref":"P000643","sample_code":"42171","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000645","patient_ref":"P000645","sample_code":"84323","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000646","patient_ref":"P000646","sample_code":"35688","hba1c":5.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000647","patient_ref":"P000647","sample_code":"99103","hba1c":9.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000648","patient_ref":"P000648","sample_code":"45631","hba1c":7.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000650","patient_ref":"P000650","sample_code":"36496","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000651","patient_ref":"P000651","sample_code":"07236","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000653","patient_ref":"P000653","sample_code":"33722","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000654","patient_ref":"P000654","sample_code":"18322","hba1c":8.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000655","patient_ref":"P000655","sample_code":"45697","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000656","patient_ref":"P000656","sample_code":"43597","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000658","patient_ref":"P000658","sample_code":"48886","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000659","patient_ref":"P000659","sample_code":"97321","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000660","patient_ref":"P000660","sample_code":"10884","hba1c":9.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000661","patient_ref":"P000661","sample_code":"48600","hba1c":8.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000662","patient_ref":"P000662","sample_code":"70418","hba1c":10.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000664","patient_ref":"P000664","sample_code":"14387","hba1c":5.4,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000665","patient_ref":"P000665","sample_code":"87213","hba1c":12.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000668","patient_ref":"P000668","sample_code":"36547","hba1c":5.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000669","patient_ref":"P000669","sample_code":"50884","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000671","patient_ref":"P000671","sample_code":"98394","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000672","patient_ref":"P000672","sample_code":"84028","hba1c":11.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000673","patient_ref":"P000673","sample_code":"65473","hba1c":11.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000675","patient_ref":"P000675","sample_code":"01646","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000677","patient_ref":"P000677","sample_code":"00295","hba1c":7.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000679","patient_ref":"P000679","sample_code":"21285","hba1c":7.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000680","patient_ref":"P000680","sample_code":"55178","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000682","patient_ref":"P000682","sample_code":"32025","hba1c":9.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000683","patient_ref":"P000683","sample_code":"20242","hba1c":7.0,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000684","patient_ref":"P000684","sample_code":"75902","hba1c":12.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000685","patient_ref":"P000685","sample_code":"26054","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000686","patient_ref":"P000686","sample_code":"94331","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000687","patient_ref":"P000687","sample_code":"38798","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000689","patient_ref":"P000689","sample_code":"13201","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000691","patient_ref":"P000691","sample_code":"11051","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000692","patient_ref":"P000692","sample_code":"96933","hba1c":5.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000693","patient_ref":"P000693","sample_code":"65943","hba1c":7.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000694","patient_ref":"P000694","sample_code":"04799","hba1c":8.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000696","patient_ref":"P000696","sample_code":"52860","hba1c":8.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000697","patient_ref":"P000697","sample_code":"07272","hba1c":12.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000698","patient_ref":"P000698","sample_code":"14768","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000701","patient_ref":"P000701","sample_code":"22874","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000702","patient_ref":"P000702","sample_code":"45190","hba1c":4.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000704","patient_ref":"P000704","sample_code":"32318","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000705","patient_ref":"P000705","sample_code":"92549","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000706","patient_ref":"P000706","sample_code":"20708","hba1c":5.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000708","patient_ref":"P000708","sample_code":"05634","hba1c":8.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000709","patient_ref":"P000709","sample_code":"27227","hba1c":9.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000711","patient_ref":"P000711","sample_code":"78961","hba1c":11.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000712","patient_ref":"P000712","sample_code":"39924","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000713","patient_ref":"P000713","sample_code":"08982","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000715","patient_ref":"P000715","sample_code":"18319","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000716","patient_ref":"P000716","sample_code":"26888","hba1c":4.4,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000717","patient_ref":"P000717","sample_code":"70162","hba1c":9.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000718","patient_ref":"P000718","sample_code":"16237","hba1c":7.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000719","patient_ref":"P000719","sample_code":"77621","hba1c":4.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000720","patient_ref":"P000720","sample_code":"10032","hba1c":10.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000721","patient_ref":"P000721","sample_code":"96144","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000722","patient_ref":"P000722","sample_code":"44198","hba1c":9.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000726","patient_ref":"P000726","sample_code":"46104","hba1c":10.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000727","patient_ref":"P000727","sample_code":"01743","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000729","patient_ref":"P000729","sample_code":"71494","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000731","patient_ref":"P000731","sample_code":"81776","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000733","patient_ref":"P000733","sample_code":"05770","hba1c":5.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000734","patient_ref":"P000734","sample_code":"42633","hba1c":6.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000735","patient_ref":"P000735","sample_code":"80295","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000737","patient_ref":"P000737","sample_code":"84575","hba1c":11.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000741","patient_ref":"P000741","sample_code":"15335","hba1c":8.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000742","patient_ref":"P000742","sample_code":"47557","hba1c":4.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000744","patient_ref":"P000744","sample_code":"75074","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000745","patient_ref":"P000745","sample_code":"94262","hba1c":10.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000746","patient_ref":"P000746","sample_code":"01754","hba1c":12.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000747","patient_ref":"P000747","sample_code":"46226","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000748","patient_ref":"P000748","sample_code":"88102","hba1c":10.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000749","patient_ref":"P000749","sample_code":"43945","hba1c":7.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000750","patient_ref":"P000750","sample_code":"57718","hba1c":10.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000752","patient_ref":"P000752","sample_code":"89516","hba1c":4.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000754","patient_ref":"P000754","sample_code":"07819","hba1c":4.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000755","patient_ref":"P000755","sample_code":"77651","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000756","patient_ref":"P000756","sample_code":"54915","hba1c":6.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000758","patient_ref":"P000758","sample_code":"82425","hba1c":7.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000759","patient_ref":"P000759","sample_code":"78211","hba1c":10.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000760","patient_ref":"P000760","sample_code":"40441","hba1c":10.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000762","patient_ref":"P000762","sample_code":"11840","hba1c":4.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000764","patient_ref":"P000764","sample_code":"46744","hba1c":7.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000765","patient_ref":"P000765","sample_code":"24802","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000766","patient_ref":"P000766","sample_code":"34139","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000767","patient_ref":"P000767","sample_code":"99168","hba1c":12.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000770","patient_ref":"P000770","sample_code":"96047","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000772","patient_ref":"P000772","sample_code":"78622","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000773","patient_ref":"P000773","sample_code":"52682","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000775","patient_ref":"P000775","sample_code":"99016","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000778","patient_ref":"P000778","sample_code":"04152","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000779","patient_ref":"P000779","sample_code":"94972","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000780","patient_ref":"P000780","sample_code":"00206","hba1c":7.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000782","patient_ref":"P000782","sample_code":"05320","hba1c":10.7,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000783","patient_ref":"P000783","sample_code":"25216","hba1c":8.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000784","patient_ref":"P000784","sample_code":"51451","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000786","patient_ref":"P000786","sample_code":"59753","hba1c":4.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000787","patient_ref":"P000787","sample_code":"89297","hba1c":11.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000788","patient_ref":"P000788","sample_code":"03612","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000789","patient_ref":"P000789","sample_code":"87998","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000790","patient_ref":"P000790","sample_code":"97054","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000792","patient_ref":"P000792","sample_code":"56082","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000793","patient_ref":"P000793","sample_code":"62829","hba1c":10.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000794","patient_ref":"P000794","sample_code":"43548","hba1c":4.2,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000795","patient_ref":"P000795","sample_code":"29975","hba1c":4.8,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000796","patient_ref":"P000796","sample_code":"48418","hba1c":9.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000797","patient_ref":"P000797","sample_code":"45245","hba1c":6.3,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000799","patient_ref":"P000799","sample_code":"62442","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000800","patient_ref":"P000800","sample_code":"60221","hba1c":9.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000801","patient_ref":"P000801","sample_code":"66098","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000802","patient_ref":"P000802","sample_code":"92149","hba1c":5.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000803","patient_ref":"P000803","sample_code":"36500","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000804","patient_ref":"P000804","sample_code":"92302","hba1c":6.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000807","patient_ref":"P000807","sample_code":"02785","hba1c":9.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000809","patient_ref":"P000809","sample_code":"63618","hba1c":9.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000810","patient_ref":"P000810","sample_code":"94874","hba1c":7.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000811","patient_ref":"P000811","sample_code":"20603","hba1c":6.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000812","patient_ref":"P000812","sample_code":"16740","hba1c":7.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000814","patient_ref":"P000814","sample_code":"27484","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000816","patient_ref":"P000816","sample_code":"73393","hba1c":6.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000817","patient_ref":"P000817","sample_code":"32601","hba1c":7.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000819","patient_ref":"P000819","sample_code":"72100","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000820","patient_ref":"P000820","sample_code":"40884","hba1c":12.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000821","patient_ref":"P000821","sample_code":"83764","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000822","patient_ref":"P000822","sample_code":"98442","hba1c":4.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000823","patient_ref":"P000823","sample_code":"53372","hba1c":9.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000824","patient_ref":"P000824","sample_code":"19578","hba1c":6.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000826","patient_ref":"P000826","sample_code":"42460","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000827","patient_ref":"P000827","sample_code":"49139","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000829","patient_ref":"P000829","sample_code":"17818","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000831","patient_ref":"P000831","sample_code":"77859","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000833","patient_ref":"P000833","sample_code":"83016","hba1c":6.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000834","patient_ref":"P000834","sample_code":"18273","hba1c":6.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000835","patient_ref":"P000835","sample_code":"39075","hba1c":8.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000836","patient_ref":"P000836","sample_code":"71435","hba1c":9.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000838","patient_ref":"P000838","sample_code":"20130","hba1c":12.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000840","patient_ref":"P000840","sample_code":"83669","hba1c":9.9,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000841","patient_ref":"P000841","sample_code":"59388","hba1c":4.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000842","patient_ref":"P000842","sample_code":"85915","hba1c":6.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000844","patient_ref":"P000844","sample_code":"92888","hba1c":7.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000845","patient_ref":"P000845","sample_code":"50371","hba1c":5.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000846","patient_ref":"P000846","sample_code":"32689","hba1c":6.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000847","patient_ref":"P000847","sample_code":"18833","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000848","patient_ref":"P000848","sample_code":"48665","hba1c":12.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000851","patient_ref":"P000851","sample_code":"80056","hba1c":7.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000853","patient_ref":"P000853","sample_code":"87243","hba1c":12.1,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000854","patient_ref":"P000854","sample_code":"66948","hba1c":11.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000855","patient_ref":"P000855","sample_code":"91961","hba1c":10.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000856","patient_ref":"P000856","sample_code":"49906","hba1c":5.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000857","patient_ref":"P000857","sample_code":"39265","hba1c":5.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000858","patient_ref":"P000858","sample_code":"32400","hba1c":5.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000859","patient_ref":"P000859","sample_code":"67684","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000860","patient_ref":"P000860","sample_code":"83610","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000861","patient_ref":"P000861","sample_code":"28550","hba1c":11.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000862","patient_ref":"P000862","sample_code":"94062","hba1c":8.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000863","patient_ref":"P000863","sample_code":"10140","hba1c":5.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000864","patient_ref":"P000864","sample_code":"17892","hba1c":9.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000865","patient_ref":"P000865","sample_code":"46959","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000866","patient_ref":"P000866","sample_code":"13460","hba1c":11.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000867","patient_ref":"P000867","sample_code":"44034","hba1c":4.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000868","patient_ref":"P000868","sample_code":"15758","hba1c":8.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000869","patient_ref":"P000869","sample_code":"43825","hba1c":5.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000871","patient_ref":"P000871","sample_code":"32125","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000872","patient_ref":"P000872","sample_code":"56590","hba1c":7.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000873","patient_ref":"P000873","sample_code":"46012","hba1c":10.6,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000874","patient_ref":"P000874","sample_code":"67887","hba1c":8.0,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000875","patient_ref":"P000875","sample_code":"61539","hba1c":7.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000876","patient_ref":"P000876","sample_code":"46094","hba1c":8.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000877","patient_ref":"P000877","sample_code":"84096","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000879","patient_ref":"P000879","sample_code":"57624","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000880","patient_ref":"P000880","sample_code":"15327","hba1c":7.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000882","patient_ref":"P000882","sample_code":"84064","hba1c":10.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000883","patient_ref":"P000883","sample_code":"47535","hba1c":4.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000884","patient_ref":"P000884","sample_code":"61907","hba1c":7.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000885","patient_ref":"P000885","sample_code":"44724","hba1c":9.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000886","patient_ref":"P000886","sample_code":"67464","hba1c":6.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000887","patient_ref":"P000887","sample_code":"29045","hba1c":8.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000888","patient_ref":"P000888","sample_code":"70489","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000889","patient_ref":"P000889","sample_code":"63538","hba1c":5.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000890","patient_ref":"P000890","sample_code":"88540","hba1c":9.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000891","patient_ref":"P000891","sample_code":"12364","hba1c":10.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000892","patient_ref":"P000892","sample_code":"25667","hba1c":10.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000893","patient_ref":"P000893","sample_code":"78260","hba1c":5.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000894","patient_ref":"P000894","sample_code":"50987","hba1c":8.7,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000896","patient_ref":"P000896","sample_code":"06433","hba1c":4.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000899","patient_ref":"P000899","sample_code":"53997","hba1c":10.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000900","patient_ref":"P000900","sample_code":"72549","hba1c":5.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000904","patient_ref":"P000904","sample_code":"86974","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000906","patient_ref":"P000906","sample_code":"71113","hba1c":11.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000907","patient_ref":"P000907","sample_code":"94393","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000908","patient_ref":"P000908","sample_code":"61711","hba1c":9.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000909","patient_ref":"P000909","sample_code":"14141","hba1c":6.3,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000910","patient_ref":"P000910","sample_code":"69276","hba1c":8.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000911","patient_ref":"P000911","sample_code":"28638","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000912","patient_ref":"P000912","sample_code":"11525","hba1c":9.0,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000913","patient_ref":"P000913","sample_code":"60438","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000914","patient_ref":"P000914","sample_code":"69960","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000915","patient_ref":"P000915","sample_code":"77962","hba1c":8.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000916","patient_ref":"P000916","sample_code":"82381","hba1c":10.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000919","patient_ref":"P000919","sample_code":"97612","hba1c":12.9,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000921","patient_ref":"P000921","sample_code":"30984","hba1c":5.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000922","patient_ref":"P000922","sample_code":"11402","hba1c":6.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000925","patient_ref":"P000925","sample_code":"43955","hba1c":6.3,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000926","patient_ref":"P000926","sample_code":"05866","hba1c":4.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000927","patient_ref":"P000927","sample_code":"55160","hba1c":8.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000929","patient_ref":"P000929","sample_code":"15182","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000930","patient_ref":"P000930","sample_code":"40302","hba1c":11.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000932","patient_ref":"P000932","sample_code":"11442","hba1c":12.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000933","patient_ref":"P000933","sample_code":"03520","hba1c":9.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000934","patient_ref":"P000934","sample_code":"02872","hba1c":4.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000935","patient_ref":"P000935","sample_code":"43327","hba1c":5.5,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000936","patient_ref":"P000936","sample_code":"05810","hba1c":12.6,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000937","patient_ref":"P000937","sample_code":"67393","hba1c":10.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000938","patient_ref":"P000938","sample_code":"89878","hba1c":9.0,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000939","patient_ref":"P000939","sample_code":"71405","hba1c":9.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000940","patient_ref":"P000940","sample_code":"31120","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000941","patient_ref":"P000941","sample_code":"33008","hba1c":8.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000943","patient_ref":"P000943","sample_code":"14875","hba1c":8.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000945","patient_ref":"P000945","sample_code":"03803","hba1c":8.9,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000946","patient_ref":"P000946","sample_code":"67820","hba1c":6.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000947","patient_ref":"P000947","sample_code":"81719","hba1c":4.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000948","patient_ref":"P000948","sample_code":"02745","hba1c":12.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000953","patient_ref":"P000953","sample_code":"59264","hba1c":4.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000954","patient_ref":"P000954","sample_code":"94726","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000956","patient_ref":"P000956","sample_code":"93486","hba1c":8.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000957","patient_ref":"P000957","sample_code":"29059","hba1c":4.8,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000959","patient_ref":"P000959","sample_code":"66178","hba1c":10.5,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000960","patient_ref":"P000960","sample_code":"80839","hba1c":11.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000963","patient_ref":"P000963","sample_code":"68906","hba1c":6.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000965","patient_ref":"P000965","sample_code":"37795","hba1c":4.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000966","patient_ref":"P000966","sample_code":"56428","hba1c":7.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000967","patient_ref":"P000967","sample_code":"27698","hba1c":12.1,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000968","patient_ref":"P000968","sample_code":"70161","hba1c":8.4,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000969","patient_ref":"P000969","sample_code":"80249","hba1c":10.2,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000971","patient_ref":"P000971","sample_code":"04908","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000972","patient_ref":"P000972","sample_code":"51162","hba1c":10.4,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000976","patient_ref":"P000976","sample_code":"76926","hba1c":12.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000977","patient_ref":"P000977","sample_code":"46872","hba1c":5.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000978","patient_ref":"P000978","sample_code":"44439","hba1c":12.7,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000979","patient_ref":"P000979","sample_code":"71352","hba1c":8.8,"flagged":true,"comment":"within range"}
+{"lab_id":"L0000981","patient_ref":"P000981","sample_code":"53202","hba1c":4.6,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000985","patient_ref":"P000985","sample_code":"79739","hba1c":5.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000986","patient_ref":"P000986","sample_code":"70188","hba1c":9.1,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000989","patient_ref":"P000989","sample_code":"38063","hba1c":12.5,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000991","patient_ref":"P000991","sample_code":"13165","hba1c":11.2,"flagged":false,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000993","patient_ref":"P000993","sample_code":"83535","hba1c":6.2,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000994","patient_ref":"P000994","sample_code":"62674","hba1c":7.6,"flagged":true,"comment":"recheck, contact lab@example.org"}
+{"lab_id":"L0000995","patient_ref":"P000995","sample_code":"32486","hba1c":4.3,"flagged":false,"comment":"within range"}
+{"lab_id":"L0000997","patient_ref":"P000997","sample_code":"55445","hba1c":9.2,"flagged":false,"comment":"within range"}

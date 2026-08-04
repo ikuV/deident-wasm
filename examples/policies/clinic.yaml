@@ -1,0 +1,57 @@
+# Policy for the generated clinic dataset (see crates/core/examples/gen_dataset.rs).
+#
+#   cargo run -p deident-core --example gen_dataset -- examples/data 1000
+#   deident anonymize examples/data/clinic-patients.csv \
+#     --policy examples/policies/clinic.yaml --out anon.csv --report risk.json
+#
+# Unlike the 12-row demo, this dataset is large enough for the equivalence-class
+# statistics to mean something: most rows share a quasi-identifier combination,
+# a deliberate minority are unique.
+version: 1
+dataset: clinic-demo
+
+key:
+  env: DEIDENT_KEY
+  inline: "demo-secret-do-not-use-in-production"
+
+on_unlisted: error
+
+fields:
+  - name: patient_id
+    class: direct_identifier
+    pseudonymize: { prefix: "pid_" }
+
+  - name: full_name
+    class: direct_identifier
+
+  - name: email
+    class: direct_identifier
+
+  - name: phone
+    class: direct_identifier
+
+  # Quasi-identifiers: generalized, not removed, so the data stays analysable.
+  - name: age
+    class: quasi_identifier
+    anonymize: { strategy: bucket, width: 10 }
+
+  - name: zip
+    class: quasi_identifier
+    anonymize: { strategy: keep_prefix, chars: 3 }
+
+  - name: admission_date
+    class: quasi_identifier
+    anonymize: { strategy: date_truncate, granularity: year_month }
+
+  - name: diagnosis
+    class: sensitive
+
+  - name: notes
+    class: utility
+
+# The notes column carries every entity type the detectors know about. Precise
+# detectors act; heuristics only report, because they produce false positives.
+presets:
+  - { preset: precise, action: redact, fields: [notes] }
+  - { preset: moderate, action: redact, fields: [notes] }
+  - { preset: heuristic, action: detect, fields: [notes] }

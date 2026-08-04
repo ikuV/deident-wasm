@@ -116,8 +116,23 @@ pub enum BuiltinPattern {
     MedicalTerm,
 }
 
-/// Every built-in, in catalog order.
+/// Every built-in, in **execution order**.
+///
+/// Order is load-bearing, not cosmetic. Rules run in sequence over the same
+/// value and each sees the previous rule's output, so a greedy detector placed
+/// early consumes text a more specific one would have matched — and the report
+/// then attributes the match to the wrong detector, or reports zero of the
+/// specific kind for a file full of them.
+///
+/// The rule is therefore **most specific first, greediest last** within each
+/// precision class:
+/// - `ssn` and `date_of_birth` precede `phone`, which otherwise swallowed
+///   `012-34-5678` and `05.12.1990` and left `13.` fragments behind.
+/// - `organization` and `medical_term` precede `person_name`, whose
+///   capitalised-bigram alternative otherwise claimed `Apollo Hospital` and
+///   `Cardiac Arrest`.
 pub const ALL: &[BuiltinPattern] = &[
+    // Precise: distinctive syntax, mostly checksum-verified.
     BuiltinPattern::Email,
     BuiltinPattern::Iban,
     BuiltinPattern::CreditCard,
@@ -125,15 +140,17 @@ pub const ALL: &[BuiltinPattern] = &[
     BuiltinPattern::Url,
     BuiltinPattern::ApiKey,
     BuiltinPattern::Ifsc,
-    BuiltinPattern::Phone,
+    // Moderate: specific digit shapes first, general phone shape last.
     BuiltinPattern::Ssn,
     BuiltinPattern::DateOfBirth,
-    BuiltinPattern::Passport,
     BuiltinPattern::LicensePlate,
-    BuiltinPattern::PersonName,
+    BuiltinPattern::Passport,
+    BuiltinPattern::Phone,
+    // Heuristic: keyword-anchored first, bare-bigram name last.
     BuiltinPattern::Address,
     BuiltinPattern::Organization,
     BuiltinPattern::MedicalTerm,
+    BuiltinPattern::PersonName,
 ];
 
 impl BuiltinPattern {
@@ -227,7 +244,11 @@ impl BuiltinPattern {
             // Unicode-aware local part, so `müller@example.de` matches whole
             // rather than leaving `mü` behind.
             BuiltinPattern::Email => {
-                r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+"
+                // `/ ? # & =` are excluded on purpose: they are not valid in an
+                // unquoted local part, and including them let the pattern eat
+                // `//alice@host` out of a URL, leaving `https:[EMAIL]` behind and
+                // preventing the `url` detector from ever matching.
+                r"[\w.!$%&'*+^`{|}~-]+@[\w-]+(?:\.[\w-]+)+"
             }
             // Two alternatives, compact first. A single space-tolerant
             // repetition would greedily absorb the words after the IBAN
@@ -249,7 +270,25 @@ impl BuiltinPattern {
             // an earlier version matched `2001:db8::` out of `2001:db8::1` and
             // left a stray `1` in output that had been reported as redacted.
             BuiltinPattern::IpAddress => {
-                r"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b|(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}(?::[0-9A-Fa-f]{1,4}){1,7}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?"
+                concat!(
+                    // IPv4-in-IPv6 FIRST: `::ffff:203.0.113.42` and
+                    // `64:ff9b::192.0.2.33` are what nginx, Java and Docker
+                    // actually log. Without this alternative the `::` form
+                    // matched `::ffff:203` and left `.0.113.42` in output that
+                    // the report called redacted.
+                    r"(?:[0-9A-Fa-f]{1,4}:){1,6}(?:[0-9A-Fa-f]{1,4})?:",
+                    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}",
+                    r"|::(?:[Ff]{4}:)?",
+                    r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}",
+                    // Plain IPv4.
+                    r"|\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b",
+                    // Pure IPv6: full, compressed-with-tail, compressed-trailing,
+                    // leading `::`. Longest first — see the note above.
+                    r"|(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}",
+                    r"|(?:[0-9A-Fa-f]{1,4}:){1,7}(?::[0-9A-Fa-f]{1,4}){1,7}",
+                    r"|(?:[0-9A-Fa-f]{1,4}:){1,7}:",
+                    r"|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?",
+                )
             }
             BuiltinPattern::Url => {
                 r"\b(?:https?|ftps?)://[^\s<>\x22'`\]]+|\bwww\.[\w-]+(?:\.[\w-]+)+[^\s<>\x22'`\]]*"
@@ -257,7 +296,18 @@ impl BuiltinPattern {
             // Known vendor token shapes. Deliberately specific: a generic
             // "long random string" pattern would flag every hash and token.
             BuiltinPattern::ApiKey => {
-                r"\b(?:sk|pk|rk)[-_](?:live|test|prod)[-_][A-Za-z0-9]{8,}|\bAKIA[0-9A-Z]{16}\b|\bASIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}|\bxox[baprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\bglpat-[A-Za-z0-9_-]{20,}|\bsk-[A-Za-z0-9]{20,}"
+                concat!(
+                    r"\b(?:sk|pk|rk)[-_](?:live|test|prod)[-_][A-Za-z0-9]{8,}",
+                    r"|\bAKIA[0-9A-Z]{16}\b|\bASIA[0-9A-Z]{16}\b",
+                    r"|\bgithub_pat_[A-Za-z0-9_]{20,}",
+                    r"|\bgh[pousr]_[A-Za-z0-9]{20,}",
+                    r"|\bxox[baprs]-[A-Za-z0-9-]{10,}",
+                    r"|\bAIza[0-9A-Za-z_-]{35}\b",
+                    r"|\bglpat-[A-Za-z0-9_-]{20,}",
+                    // Modern OpenAI/Anthropic keys interleave `-`/`_` segments
+                    // (`sk-proj-`, `sk-ant-api03-`), so the tail must allow them.
+                    r"|\bsk-[A-Za-z0-9][A-Za-z0-9_-]{19,}",
+                )
             }
             // IFSC is four letters, a zero, then six alphanumerics; an adjacent
             // account number is captured when present.
@@ -287,7 +337,19 @@ impl BuiltinPattern {
                 r"\b(?:Dr|Doctor|Prof|Professor|Mr|Mrs|Ms|Miss|Sr|Sra|Herr|Frau|Shri|Smt|Sri)\.?\s+\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+){0,2}\b|\b\p{Lu}\p{L}+\s+\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+)?\b"
             }
             BuiltinPattern::Address => {
-                r"(?i)\b\d{1,5}[/-]?[A-Za-z]?\s+(?:[\p{Lu}][\p{L}.'-]*\s+){0,4}(?:road|rd|street|st|marg|nagar|lane|ln|avenue|ave|boulevard|blvd|drive|dr|colony|sector|block|strasse|straße|str|weg|platz|gasse|allee)\b(?:[\s,]+\d{5,6}\b)?"
+                concat!(
+                    // Number BEFORE the street word (UK/US/India). The postcode
+                    // and city tail is optional and tolerates a city name, so
+                    // `123 MG Road, Pune 411001` matches in full.
+                    r"(?i)\b\d{1,5}[/-]?[a-z]?\s+(?:[\p{L}][\p{L}.'-]*\s+){0,4}",
+                    r"(?:road|rd|street|st|marg|nagar|lane|ln|avenue|ave|boulevard|blvd|drive|colony|sector|block)\b",
+                    r"(?:[\s,]+[\p{L}][\p{L}.'-]{2,}){0,2}(?:[\s,]+\d{4,6}\b)?",
+                    // Number AFTER the street word — every German, Austrian,
+                    // Swiss, Dutch and Scandinavian address. Without this the
+                    // whole German half of the vocabulary was unreachable.
+                    r"|(?i)\b[\p{L}][\p{L}.'-]*(?:strasse|straße|str\.?|weg|platz|gasse|allee|damm|ufer|ring)\s+\d{1,4}[a-z]?",
+                    r"(?:[\s,]+\d{4,5}\b(?:[\s,]+[\p{L}][\p{L}.'-]{2,})?)?",
+                )
             }
             BuiltinPattern::Organization => {
                 r"\b(?:\p{Lu}[\p{L}&'.-]*\s+){0,4}(?:Hospital|Hospitals|Clinic|Clinics|Bank|Ltd|Limited|Pvt|Private|Inc|LLC|LLP|GmbH|AG|NV|BV|PLC|Corp|Corporation|Company|Institute|Institut|University|Universität|College|Foundation|Trust|Laboratories|Laboratory|Labs|Pharma|Pharmaceuticals|Healthcare|Klinik|Klinikum|Praxis)\b"

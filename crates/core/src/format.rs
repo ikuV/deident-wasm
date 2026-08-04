@@ -313,7 +313,13 @@ fn typed_value(cell: &str) -> serde_json::Value {
     if cell.is_empty() {
         return serde_json::Value::Null;
     }
-    if let Ok(number) = cell.parse::<i64>() {
+    // Require an exact text round-trip, exactly as the float branch below does.
+    // Without it `007` becomes 7 and `01234` becomes 1234 — and a zip code is
+    // the textbook quasi-identifier, so corrupting it breaks joins and
+    // geography while the report claims the column was preserved.
+    if let Ok(number) = cell.parse::<i64>()
+        && number.to_string() == cell
+    {
         return serde_json::Value::from(number);
     }
     // Only re-type floats whose text round-trips, so "1.10" stays a string
@@ -394,6 +400,10 @@ mod tests {
     fn numbers_keep_their_text_when_ambiguous() {
         assert_eq!(typed_value("1.10"), serde_json::Value::String("1.10".into()));
         assert_eq!(typed_value("220.5"), serde_json::json!(220.5));
-        assert_eq!(typed_value("007"), serde_json::json!(7));
+        // Zero-padded values must stay strings: `007` is an identifier, not 7.
+        assert_eq!(typed_value("007"), serde_json::Value::String("007".into()));
+        assert_eq!(typed_value("01234"), serde_json::Value::String("01234".into()));
+        assert_eq!(typed_value("1234"), serde_json::json!(1234));
+        assert_eq!(typed_value("-42"), serde_json::json!(-42));
     }
 }

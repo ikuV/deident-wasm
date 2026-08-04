@@ -214,6 +214,10 @@ pub struct DicomPolicy {
     /// Explicit per-tag rules; these win over profile and structural rules.
     #[serde(default)]
     pub tags: Vec<TagRule>,
+    /// Set when the document actually contained a `structural:` block, so
+    /// `profile: none` can still honour it.
+    #[serde(skip)]
+    structural_is_explicit: bool,
     /// Pattern rules used by `clean_text` actions, reusing the tabular engine's
     /// content-pattern model.
     #[serde(default)]
@@ -250,8 +254,12 @@ pub enum PolicyKind {
 impl DicomPolicy {
     /// Parse and validate a policy from YAML.
     pub fn from_yaml(yaml: &str) -> Result<Self, DicomError> {
-        let policy: DicomPolicy = serde_yaml::from_str(yaml)
+        let mut policy: DicomPolicy = serde_yaml::from_str(yaml)
             .map_err(|e| DicomError::Policy(format!("invalid DICOM policy: {e}")))?;
+        // serde cannot tell a default from an omitted block, so detect it here.
+        policy.structural_is_explicit = yaml
+            .lines()
+            .any(|line| line.trim_start().starts_with("structural:"));
         policy.validate()?;
         Ok(policy)
     }
@@ -320,7 +328,11 @@ impl DicomPolicy {
         Ok(ResolvedPolicy {
             explicit,
             structural: self.structural.clone(),
-            structural_enabled: self.profile != ProfileKind::None,
+            // `profile: none` means "no built-in tag table", not "no safety net".
+            // Silently discarding an explicitly written `structural:` block let
+            // person names, private tags and study UIDs survive a policy that had
+            // asked for exactly those protections.
+            structural_enabled: self.profile != ProfileKind::None || self.structural_is_explicit,
         })
     }
 }
@@ -361,6 +373,11 @@ impl ResolvedPolicy {
             return Some(&TagAction::Uid);
         }
         None
+    }
+
+    /// Whether the structural safety net is active.
+    pub fn structural_enabled(&self) -> bool {
+        self.structural_enabled
     }
 
     /// Tags with an explicit or profile-level rule (for reporting coverage).

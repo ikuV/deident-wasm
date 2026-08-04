@@ -67,8 +67,13 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
     let for_mode = |m: Mode| mode.is_none_or(|requested| requested == m);
 
     // --- key material ---------------------------------------------------
-    let tokenizes =
-        for_mode(Mode::Pseudonymize) || policy.patterns.iter().any(|p| p.action.needs_key());
+    // Expanded rules again: a preset that tokenizes still uses the key, so the
+    // inline-key warning must fire for it.
+    let tokenizes = for_mode(Mode::Pseudonymize)
+        || policy
+            .effective_patterns()
+            .iter()
+            .any(|p| p.action.needs_key());
     if let Some(key) = &policy.key
         && key.inline.is_some()
         && tokenizes
@@ -116,6 +121,9 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
         )),
         crate::policy::UnlistedAction::Error => {}
     }
+
+    // Rules with presets expanded — used by both the field and pattern checks.
+    let effective = policy.effective_patterns();
 
     // --- field classification -------------------------------------------
     let direct_identifiers = policy
@@ -198,10 +206,17 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
             .iter()
             .any(|hint| field.name.to_ascii_lowercase().contains(hint));
         let kept = !matches!(field.anonymize, Some(AnonymizeCfg::Remove));
-        let covered = policy.patterns.iter().any(|p| {
-            p.fields
-                .as_ref()
-                .is_none_or(|fields| fields.contains(&field.name))
+        // Coverage must be judged on the EXPANDED rule set: a policy that scans
+        // this column via `presets` is covered, and reporting otherwise is a
+        // false positive that teaches people to ignore lints.
+        //
+        // A `detect`-only rule does not count: it reports matches and leaves the
+        // text exactly as it was, so the identifiers are still in the output.
+        let covered = effective.iter().any(|p| {
+            p.action != PatternAction::Detect
+                && p.fields
+                    .as_ref()
+                    .is_none_or(|fields| fields.contains(&field.name))
         });
         if looks_free_text
             && kept
@@ -220,7 +235,6 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
     }
 
     // --- pattern rules ---------------------------------------------------
-    let effective = policy.effective_patterns();
     let mut seen_builtins: std::collections::HashMap<&str, &str> =
         std::collections::HashMap::new();
     for pattern in &effective {

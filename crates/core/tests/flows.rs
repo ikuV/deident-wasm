@@ -384,3 +384,39 @@ patterns:
         report.warnings
     );
 }
+
+/// The free-text lint must judge coverage on the EXPANDED rule set. A policy
+/// that scans a column via `presets` is covered; warning anyway is a false
+/// positive, and false-positive lints teach people to ignore lints.
+#[test]
+fn free_text_lint_accounts_for_presets_and_ignores_detect_only_rules() {
+    let covered_by_preset = r#"
+version: 1
+dataset: d
+fields:
+  - { name: id, class: direct_identifier }
+  - { name: notes, class: utility }
+presets:
+  - { preset: precise, action: redact, fields: [notes] }
+"#;
+    let lints = deident_core::lint(
+        &Policy::from_yaml(covered_by_preset).unwrap(),
+        Some(Mode::Anonymize),
+    );
+    assert!(
+        !lints.iter().any(|l| l.rule == "free-text-without-patterns"),
+        "a preset covering the column must count as coverage: {lints:?}"
+    );
+
+    // A detect-only rule reports matches and changes nothing, so the identifiers
+    // are still in the output — that must still warn.
+    let detect_only = covered_by_preset.replace("action: redact", "action: detect");
+    let lints = deident_core::lint(
+        &Policy::from_yaml(&detect_only).unwrap(),
+        Some(Mode::Anonymize),
+    );
+    assert!(
+        lints.iter().any(|l| l.rule == "free-text-without-patterns"),
+        "a detect-only rule must not silence the warning: {lints:?}"
+    );
+}

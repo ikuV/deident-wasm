@@ -793,6 +793,48 @@ The `limitations` block is embedded in every report by design.
 - Non-goals: differential privacy, synthetic data generation, free-text/NLP
   de-identification, and legal certification of any output.
 
+## Example datasets
+
+The repo ships a 12-row demo (`examples/data/patients.csv`) for reading at a
+glance, and a generator for datasets large enough that the statistics mean
+something:
+
+```bash
+cargo run -p deident-core --example gen_dataset -- examples/data 1000
+
+deident anonymize examples/data/clinic-patients.csv \
+  --policy examples/policies/clinic.yaml --out anon.csv --report risk.json
+```
+
+| File | Contents |
+|---|---|
+| `clinic-patients.csv` | direct identifiers, quasi-identifiers, free text carrying every entity type the detectors know |
+| `clinic-visits.csv` | foreign key into patients under a *different* column name — for chained runs and `pseudonymize.domain` |
+| `clinic-labs.jsonl` | a JSONL table with a zero-padded code and a real float, so the JSONL path is exercised |
+| `clinic-messy.csv` | the same shape with real-world damage (see below) |
+
+Two things make this more useful than simply being big:
+
+**The quasi-identifier distribution is engineered.** Ages, ZIPs and dates are
+drawn so most rows land in large equivalence classes while a deliberate minority
+are unique. On 1,000 rows that yields ~300 classes with ~16% unique rows — a
+number you can reason about. Uniformly random data would make every row unique,
+which makes the report look alarming and teaches nothing.
+
+**`clinic-messy.csv` contains what real exports actually contain:** a UTF-8 BOM
+and mixed-case headers (both silently make an exact-match policy field inert),
+empty cells, dates in `14.03.2024` order that no ISO parser accepts, card-shaped
+numbers that fail Luhn, zero-padded identifiers that naive type inference
+corrupts, `1.2.3.4` version strings that look like IPv4, and non-ASCII names.
+Point a policy at it to see how the tool behaves when the input misbehaves.
+
+Output is deterministic — fixed seed, counter-based PRNG — so regenerating gives
+byte-identical files and tests stay reproducible. Pass a larger row count to
+scale up; nothing about the generator is limited to 1,000.
+
+> These are synthetic records with deliberately planted identifiers. Do not mix
+> them with real data.
+
 ## Versioning
 
 Current version: **0.2.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed.
