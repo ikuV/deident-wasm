@@ -452,3 +452,61 @@ fn converts_between_formats_while_transforming() {
     assert_eq!(first["age"], "30-39", "generalized values are strings");
     assert!(!raw.contains("Alice"));
 }
+
+/// End-to-end DICOM de-identification over a generated study.
+#[test]
+fn dicom_deidentifies_a_study_and_reports_honestly() {
+    let tmp = tempfile::tempdir().unwrap();
+    let study = tmp.path().join("study");
+    let out = tmp.path().join("deid");
+    let report_path = tmp.path().join("report.json");
+    deident_dicom::synthetic::write_study(&study, 2).unwrap();
+
+    let policy = tmp.path().join("dicom.yaml");
+    std::fs::write(
+        &policy,
+        "version: 1\nkind: dicom\ndataset: cli-dicom-test\n\
+         key: { inline: \"cli-dicom-secret\" }\nprofile: basic\n\
+         patterns:\n  - { name: iban, builtin: iban, action: redact }\n",
+    )
+    .unwrap();
+
+    deident()
+        .arg("dicom")
+        .arg(&study)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(&out)
+        .arg("--report")
+        .arg(&report_path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 instance(s) written"))
+        // The pixel caveat must never be omitted from a DICOM run.
+        .stdout(predicate::str::contains("pixel data was NOT modified"))
+        .stdout(predicate::str::contains("not full conformance"));
+
+    // No planted PHI may survive in any output byte.
+    for entry in std::fs::read_dir(&out).unwrap() {
+        let bytes = std::fs::read(entry.unwrap().path()).unwrap();
+        for phi in [
+            deident_dicom::synthetic::PHI.patient_name,
+            deident_dicom::synthetic::PHI.patient_id,
+            deident_dicom::synthetic::PHI.study_uid,
+            "DE89370400440532013000",
+        ] {
+            assert!(
+                !bytes.windows(phi.len()).any(|w| w == phi.as_bytes()),
+                "PHI survived: {phi}"
+            );
+        }
+    }
+
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).unwrap()).unwrap();
+    assert_eq!(report["instances_written"], 2);
+    assert_eq!(report["instances_failed"], 0);
+    // 1 study + 1 series + 2 SOP UIDs.
+    assert_eq!(report["distinct_uids_remapped"], 4);
+}

@@ -1,0 +1,23 @@
+[package]
+name = "deident-dicom"
+description = "DICOM metadata de-identification for the deident privacy transformation engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+deident-core = { workspace = true }
+dicom-object = { workspace = true }
+dicom-core = { workspace = true }
+dicom-dictionary-std = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+blake3 = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+dicom-object = { workspace = true }

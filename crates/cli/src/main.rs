@@ -8,7 +8,9 @@
 //! - `chain`: several datasets of one export, with shared token scoping,
 //! - `lint`: report risky-but-valid policy patterns,
 //! - `vault`: inspect/export an encrypted mapping vault,
-//! - `reverse`: re-identify tokenized columns using a vault.
+//! - `reverse`: re-identify tokenized columns using a vault,
+//! - `dicom`: de-identify DICOM instance metadata (a separate data model, see
+//!   the `deident-dicom` crate).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -52,6 +54,26 @@ enum Command {
     Vault(VaultArgs),
     /// Re-identify tokenized columns of a dataset using a vault.
     Reverse(ReverseArgs),
+    /// De-identify DICOM instance metadata (single file or directory tree).
+    Dicom(DicomArgs),
+}
+
+#[derive(Args)]
+struct DicomArgs {
+    /// Input `.dcm` file, or a directory to process recursively.
+    input: PathBuf,
+    /// DICOM policy YAML (`kind: dicom`).
+    #[arg(long)]
+    policy: PathBuf,
+    /// Output file, or output directory when the input is a directory.
+    #[arg(long)]
+    out: PathBuf,
+    /// Optional JSON report (per-instance, or aggregated for a directory).
+    #[arg(long)]
+    report: Option<PathBuf>,
+    /// Write an encrypted mapping vault recording every reversible mapping.
+    #[arg(long)]
+    vault: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -233,6 +255,7 @@ fn main() -> ExitCode {
         Command::Lint(args) => run_lint(args),
         Command::Vault(args) => run_vault(args),
         Command::Reverse(args) => run_reverse(args),
+        Command::Dicom(args) => run_dicom(args),
     };
 
     match result {
@@ -526,6 +549,98 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
     );
     println!("  note: the output contains original personal data again");
     Ok(ExitCode::SUCCESS)
+}
+
+// --- DICOM ---------------------------------------------------------------
+
+fn run_dicom(args: &DicomArgs) -> anyhow::Result<ExitCode> {
+    let policy_yaml = std::fs::read_to_string(&args.policy)
+        .with_context(|| format!("cannot read DICOM policy '{}'", args.policy.display()))?;
+    let policy = deident_dicom::DicomPolicy::from_yaml(&policy_yaml)
+        .with_context(|| format!("invalid DICOM policy '{}'", args.policy.display()))?;
+    let options = deident_dicom::engine::RunOptions {
+        vault_path: args.vault.clone(),
+    };
+
+    // The DICOM stack is not compiled into the wasm guest, so these jobs always
+    // run in-process. Say so rather than implying sandbox isolation.
+    eprintln!(
+        "note: DICOM jobs run in-process; the wasm sandbox does not carry the DICOM parser"
+    );
+
+    if args.input.is_dir() {
+        let report =
+            deident_dicom::deidentify_directory(&args.input, &args.out, &policy, &options)?;
+        println!(
+            "DICOM de-identification: {} instance(s) written, {} failed, {} skipped (dataset '{}')",
+            report.instances_written,
+            report.instances_failed,
+            report.non_dicom_skipped,
+            report.dataset
+        );
+        println!(
+            "  {} distinct UID(s) remapped consistently across the run",
+            report.distinct_uids_remapped
+        );
+        println!("  highest pixel risk: {}", report.highest_pixel_risk);
+        for warning in &report.warnings {
+            println!("  warning: {warning}");
+        }
+        print_pixel_caveat();
+        if let Some(path) = &args.report {
+            write_json(path, &report)?;
+            println!("  report: {}", path.display());
+        }
+        return Ok(if report.instances_failed == 0 {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        });
+    }
+
+    let report = deident_dicom::deidentify_file(&args.input, &args.out, &policy, &options)?;
+    println!(
+        "DICOM de-identification complete: {} attribute(s) examined, {} modified (dataset '{}')",
+        report.attributes_examined, report.attributes_modified, report.dataset
+    );
+    let mut by_action: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
+    for finding in &report.tags {
+        *by_action.entry(finding.action.as_str()).or_default() += finding.occurrences;
+    }
+    for (action, count) in by_action {
+        println!("  {action}: {count} attribute(s)");
+    }
+    println!(
+        "  {} UID(s) remapped, sequence depth {}, {} private attribute(s)",
+        report.uids_remapped, report.max_sequence_depth, report.private_attributes
+    );
+    println!("  pixel risk: {}", report.pixel_risk.level);
+    for warning in &report.warnings {
+        println!("  warning: {warning}");
+    }
+    print_pixel_caveat();
+    println!("  output: {}", args.out.display());
+    if let Some(path) = &args.report {
+        write_json(path, &report)?;
+        println!("  report: {}", path.display());
+    }
+    if let Some(path) = &args.vault {
+        println!("  vault: {}", path.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The one caveat that must never be omitted from a DICOM run.
+fn print_pixel_caveat() {
+    println!(
+        "  note: pixel data was NOT modified — identifiers burned into the image survive; \
+         coverage is a curated Annex E core, not full conformance"
+    );
+}
+
+fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
+    std::fs::write(path, serde_json::to_vec_pretty(value)?)
+        .with_context(|| format!("cannot write '{}'", path.display()))
 }
 
 // --- engines -------------------------------------------------------------

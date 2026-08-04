@@ -6,6 +6,7 @@ members = [
     "crates/host",
     "crates/worker",
     "crates/cli",
+    "crates/dicom",
 ]
 
 [workspace.package]
@@ -35,6 +36,7 @@ deident-types = { path = "crates/types" }
 # (host, cli) opt in with features = ["parquet"].
 deident-core = { path = "crates/core", default-features = false }
 deident-host = { path = "crates/host" }
+deident-dicom = { path = "crates/dicom" }
 
 # external
 serde = { version = "1", features = ["derive"] }
@@ -56,6 +58,9 @@ arrow-array = "59"
 arrow-schema = "59"
 arrow-cast = "59"
 bytes = "1"
+dicom-object = "0.10"
+dicom-core = "0.10"
+dicom-dictionary-std = "0.10"
 uuid = { version = "1", features = ["v4"] }
 wasmtime = "47"
 wasmtime-wasi = "47"

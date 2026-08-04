@@ -1,8 +1,8 @@
 # deident
 
 **Privacy transformation engine for structured datasets** — pseudonymization and
-risk-assessed anonymization for CSV, JSONL and Parquet, driven by a declarative
-YAML policy.
+risk-assessed anonymization for CSV, JSONL, Parquet and DICOM, driven by a
+declarative YAML policy.
 
 ```
 $ deident anonymize patients.csv --policy patients.yaml --out anon.csv --report report.json
@@ -53,6 +53,8 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
   [Mapping vault and reversal](#mapping-vault-and-reversal).
 - **Risk report** — row counts, per-identifier actions, pattern findings and
   equivalence-class statistics. See [Risk report](#risk-report).
+- **DICOM** — metadata de-identification of medical imaging instances, with
+  consistent UID remapping across a study. See [DICOM](#dicom).
 - **Policy lints** — warn about risky-but-valid policies before a job runs.
   See [Policy lints](#policy-lints).
 - **Audit log** — append-only JSONL, metadata only. See
@@ -116,6 +118,7 @@ deident <COMMAND> [OPTIONS]
 | `lint <POLICY>` | Report risky-but-valid policy configurations ([Policy lints](#policy-lints)) |
 | `vault export <VAULT> --policy <FILE>` | Decrypt a mapping vault to CSV ([Mapping vault](#mapping-vault-and-reversal)) |
 | `reverse <INPUT> --vault <FILE> --policy <FILE> --out <FILE>` | Re-identify tokenized values using a vault |
+| `dicom <INPUT> --policy <FILE> --out <PATH>` | De-identify DICOM instance metadata, file or directory ([DICOM](#dicom)) |
 | `help [COMMAND]` | Print help |
 
 Options for `pseudonymize` / `anonymize`:
@@ -440,6 +443,102 @@ and no file is created.
 > control, and treat `vault export` and `reverse` as privileged operations —
 > their output contains original personal data again.
 
+## DICOM
+
+Medical imaging instances are not tabular — a DICOM object is a nested,
+tag-keyed attribute tree with typed value representations, sequences, a separate
+file-meta header and a pixel payload. So DICOM gets its own policy dialect and
+its own command, while reusing the same key derivation, tokenization, mocks,
+mapping vault and audit log.
+
+```bash
+# a single instance
+deident dicom study/image-001.dcm --policy dicom.yaml --out deid/image-001.dcm
+
+# or a whole directory tree, recursively, with one shared identity scope
+deident dicom study/ --policy dicom.yaml --out deid/ --report deid.json --vault vault.jsonl
+```
+
+### Scope — read this first
+
+> ⚠️ **This is not DICOM PS3.15 Annex E conformance.** It implements a *curated
+> core* of the Basic Application Level Confidentiality Profile plus structural
+> rules, and every report says so. If you need certified conformance you must
+> extend the policy's tag list and validate it against your own data.
+>
+> ⚠️ **Burned-in pixel PHI is detected and flagged, never removed.** Ultrasound
+> frames, secondary captures and scanned documents routinely render patient
+> details into the image itself. Cleaning that requires OCR and cannot be made
+> reliable, so this tool refuses to claim it. Every run prints the caveat and
+> reports a `pixel_risk` level with its reasoning.
+
+### How coverage works
+
+Three layers, highest precedence first:
+
+1. **Explicit `tags:` rules** in your policy.
+2. **The selected profile** (`basic` — the curated Annex E core).
+3. **Structural rules** that catch whole *classes* of attribute rather than
+   named instances: every person-name (`PN`) attribute, every identity UID,
+   every private attribute (odd group — unknown vendor semantics), and the
+   curve/overlay groups.
+
+That third layer is deliberate. Transcribing ~500 Annex E rows from memory would
+be error-prone, and a missed row means PHI survives. Rules keyed on VR and tag
+structure fail *safe* — they remove what they don't recognise — and the curated
+table then handles the well-known core exactly.
+
+### Actions
+
+| Action | Annex E | Effect |
+|---|---|---|
+| `remove` | `X` | Delete the attribute |
+| `empty` | `Z` | Keep the attribute, zero-length |
+| `replace` | `D` | Fixed literal (`value:`) |
+| `pseudonymize` | `D` | Deterministic keyed pseudonym; `mock: person_name` produces a readable `Family^Given` instead of a hex token |
+| `uid` | `U` | New UID, **consistently remapped** — the same original UID becomes the same replacement in every instance of the study |
+| `date_shift` | — | Shift by a deterministic per-subject offset, so intervals survive |
+| `date_truncate` | — | Truncate to year or year-month (padded to stay a valid `DA`) |
+| `clean_text` | `C` | Run the policy's [content-pattern rules](#content-pattern-rules) over the text |
+| `keep` | `K` | Leave untouched |
+
+Tags are addressed by standard keyword (`PatientName`) or numerically
+(`(0010,0010)`). Replacement UIDs use the `2.25.<decimal>` arc that DICOM PS3.5
+reserves for UUID-derived OIDs, so no registered organisational root is needed.
+
+A complete annotated example ships in
+[examples/policies/dicom-basic.yaml](examples/policies/dicom-basic.yaml).
+
+### What survives, and why
+
+`PatientSex` and `PatientAge` are **kept** by the basic profile because they are
+clinically load-bearing — but they are quasi-identifiers, and the report says so.
+Format-identifying UIDs (`SOPClassUID`, `TransferSyntaxUID`) are never remapped;
+doing so would make the file unreadable. Pixel data and image geometry pass
+through untouched.
+
+UID remapping intentionally **breaks references from outside the processed set**
+— a PACS or a report citing the original UIDs will no longer resolve.
+
+### Test data
+
+Public DICOM collections (TCIA, pydicom-data, GDCM) are *already*
+de-identified, which makes them unable to demonstrate that a de-identifier
+works — there is no PHI left to remove. So the crate generates its own fixtures
+with identifiers planted in known attributes, including one nested inside a
+sequence and one in a private block:
+
+```bash
+cargo run -p deident-dicom --example gen_fixtures -- ./study 3
+```
+
+The test suite runs against these and asserts at the **byte level** that no
+planted identifier survives anywhere in the output file.
+
+DICOM jobs run in-process: the wasm guest does not carry the DICOM parser (the
+same module-size trade-off as Parquet). Since DICOM parsers are historically a
+CVE-rich surface, sandboxing this path is on the roadmap.
+
 ## Policy lints
 
 A policy can be perfectly valid and still not do what its author intended — a
@@ -630,6 +729,7 @@ The `limitations` block is embedded in every report by design.
 | `crates/core` | Policy schema, transforms, job engine, risk reports |
 | `crates/host` | Execution engines: in-process native and per-job Wasmtime sandbox |
 | `crates/worker` | Wasm guest that executes one job inside its sandbox |
+| `crates/dicom` | DICOM policy, profile and de-identification engine |
 | `crates/types` | Shared request/response/report models |
 
 ```bash
@@ -660,9 +760,16 @@ older local toolchain; run clippy with `-D warnings` locally to match it.
 Everything on the original roadmap is now implemented. What's next, roughly in
 order of value:
 
+- **Act on the security audit** — see [SECURITY_AUDIT.md](SECURITY_AUDIT.md);
+  the temp-workspace permissions and fail-closed key resolution come first.
 - **Streaming at scale** — Parquet and the equivalence-class statistics hold
   data in memory. Chunked row-group processing and a spill-to-disk class map
   would lift the dataset-size ceiling.
+- **Broader DICOM coverage** — extend the tag table toward full Annex E, add the
+  profile options (Retain Longitudinal Temporal, Retain Patient Characteristics,
+  Retain Safe Private), and sandbox the DICOM parser.
+- **Burned-in pixel detection** — OCR-assisted flagging of PHI rendered into
+  image pixels. Detection only; cleaning would remain a claim we refuse to make.
 - **Ship the worker with releases** — embed or bundle `deident-worker.wasm`
   next to the binary so `auto` always sandboxes instead of falling back.
 - **k-anonymity enforcement** — today the report *measures* small equivalence

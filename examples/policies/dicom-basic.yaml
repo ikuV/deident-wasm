@@ -1,0 +1,61 @@
+# Example DICOM de-identification policy.
+#
+#   deident dicom study/ --policy examples/policies/dicom-basic.yaml \
+#     --out study-deid/ --report deid-report.json
+#
+# Scope note: `profile: basic` is a CURATED core of DICOM PS3.15 Annex E plus
+# structural rules — not full conformance. Pixel data is never modified.
+version: 1
+kind: dicom
+
+# Identity scope. Share it across every instance of a study so UIDs, pseudonyms
+# and date offsets remap consistently.
+dataset: hospital-study-demo
+
+key:
+  env: DEIDENT_KEY
+  inline: "demo-secret-do-not-use-in-production"
+
+# basic | structural | none
+profile: basic
+
+structural:
+  person_names: true          # every PN-valued attribute, even unlisted ones
+  uids: true                  # every identity UID, remapped consistently
+  private_tags: true          # unknown vendor semantics -> remove
+  curves_and_overlays: true   # 5xxx/6xxx can carry annotations
+  retain_safe_private: false  # opt-in and risky
+
+# Explicit rules win over the profile.
+tags:
+  # Keep a readable placeholder instead of a pseudonym.
+  - tag: PatientName
+    action: pseudonymize
+    domain: patient
+    mock: person_name
+
+  # Institution is useful for multi-site analysis; pseudonymize instead of drop.
+  - tag: InstitutionName
+    action: pseudonymize
+    domain: site
+    prefix: "SITE-"
+
+  # Shift study dates by one offset per patient so intervals survive.
+  - tag: StudyDate
+    action: date_shift
+    max_days: 3650
+    domain: patient
+
+  # Numeric tags work too, for private or unusual attributes.
+  - tag: "(0008,1030)"        # StudyDescription
+    action: clean_text
+
+# Pattern rules used by `clean_text` actions, reusing the tabular engine's
+# content-pattern model.
+patterns:
+  - name: iban
+    builtin: iban
+    action: redact
+  - name: email
+    builtin: email
+    action: redact
