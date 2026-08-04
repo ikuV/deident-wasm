@@ -9,14 +9,24 @@ on:
   push:
     branches: [ "main" ]
     paths:
+      # Sample data/policies, and anything that can change how they are
+      # transformed. Engine/policy source counts: a behavior change there is
+      # exactly what the matrix exists to catch.
       - "examples/**"
-      - "crates/cli/tests/matrix.rs"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/feature-matrix.yml"
   pull_request:
     branches: [ "main" ]
     paths:
+      # Sample data/policies, and anything that can change how they are
+      # transformed. Engine/policy source counts: a behavior change there is
+      # exactly what the matrix exists to catch.
       - "examples/**"
-      - "crates/cli/tests/matrix.rs"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/feature-matrix.yml"
   workflow_dispatch:
 

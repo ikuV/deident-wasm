@@ -163,22 +163,12 @@ impl<W: Write> RowWriter for CsvWriter<W> {
 
 // --- JSONL ---------------------------------------------------------------
 
-/// Scalar JSON type of a column, so untouched values keep their type on write.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum JsonKind {
-    String,
-    Number,
-    Bool,
-    Null,
-}
-
 /// One flat JSON object per line. Column order (and the set of columns) comes
 /// from the first record; later records may omit keys (treated as empty) but
 /// must not introduce new ones.
 struct JsonlReader<R: Read> {
     lines: std::io::Lines<BufReader<R>>,
     headers: Vec<String>,
-    kinds: Vec<JsonKind>,
     /// First record, consumed before reading further lines.
     pending: Option<Vec<String>>,
     row: u64,
@@ -188,7 +178,6 @@ impl<R: Read> JsonlReader<R> {
     fn new(input: R) -> Result<Self, CoreError> {
         let mut lines = BufReader::new(input).lines();
         let mut headers = Vec::new();
-        let mut kinds = Vec::new();
         let mut pending = None;
         // Skip blank leading lines; the first object defines the schema.
         for line in lines.by_ref() {
@@ -197,9 +186,8 @@ impl<R: Read> JsonlReader<R> {
                 continue;
             }
             let object = parse_object(&line, 1)?;
-            for (key, value) in &object {
+            for (key, _) in &object {
                 headers.push(key.clone());
-                kinds.push(kind_of(value));
             }
             pending = Some(
                 object
@@ -212,7 +200,6 @@ impl<R: Read> JsonlReader<R> {
         Ok(Self {
             lines,
             headers,
-            kinds,
             pending,
             row: 1,
         })
@@ -262,15 +249,6 @@ fn parse_object(line: &str, row: u64) -> Result<Vec<(String, serde_json::Value)>
     }
 }
 
-fn kind_of(value: &serde_json::Value) -> JsonKind {
-    match value {
-        serde_json::Value::Number(_) => JsonKind::Number,
-        serde_json::Value::Bool(_) => JsonKind::Bool,
-        serde_json::Value::Null => JsonKind::Null,
-        _ => JsonKind::String,
-    }
-}
-
 /// Flatten a scalar JSON value to its string form. Nested objects and arrays
 /// are rejected: the policy model classifies columns, and a nested value has
 /// no single class.
@@ -289,9 +267,6 @@ fn scalar_to_string(value: &serde_json::Value, row: u64) -> Result<String, CoreE
 struct JsonlWriter<W: Write> {
     output: W,
     headers: Vec<String>,
-    /// Column types observed on the first written row, used to keep numbers
-    /// and booleans typed when their value was not modified.
-    kinds: Vec<JsonKind>,
 }
 
 impl<W: Write> JsonlWriter<W> {
@@ -299,7 +274,6 @@ impl<W: Write> JsonlWriter<W> {
         Self {
             output,
             headers: Vec::new(),
-            kinds: Vec::new(),
         }
     }
 }
@@ -318,7 +292,7 @@ impl<W: Write> RowWriter for JsonlWriter<W> {
                 .get(i)
                 .cloned()
                 .unwrap_or_else(|| format!("column_{i}"));
-            object.insert(key, typed_value(cell, self.kinds.get(i).copied()));
+            object.insert(key, typed_value(cell));
         }
         let mut line = serde_json::to_vec(&object)
             .map_err(|e| CoreError::Format(format!("cannot serialize JSONL record: {e}")))?;
@@ -335,7 +309,7 @@ impl<W: Write> RowWriter for JsonlWriter<W> {
 
 /// Re-type a cell for JSON output: values that still look like numbers or
 /// booleans are emitted as such, everything else as a string.
-fn typed_value(cell: &str, _hint: Option<JsonKind>) -> serde_json::Value {
+fn typed_value(cell: &str) -> serde_json::Value {
     if cell.is_empty() {
         return serde_json::Value::Null;
     }
@@ -418,8 +392,8 @@ mod tests {
 
     #[test]
     fn numbers_keep_their_text_when_ambiguous() {
-        assert_eq!(typed_value("1.10", None), serde_json::Value::String("1.10".into()));
-        assert_eq!(typed_value("220.5", None), serde_json::json!(220.5));
-        assert_eq!(typed_value("007", None), serde_json::json!(7));
+        assert_eq!(typed_value("1.10"), serde_json::Value::String("1.10".into()));
+        assert_eq!(typed_value("220.5"), serde_json::json!(220.5));
+        assert_eq!(typed_value("007"), serde_json::json!(7));
     }
 }

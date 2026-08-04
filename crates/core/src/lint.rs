@@ -201,7 +201,7 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
         let covered = policy.patterns.iter().any(|p| {
             p.fields
                 .as_ref()
-                .is_none_or(|fields| fields.iter().any(|f| *f == field.name))
+                .is_none_or(|fields| fields.contains(&field.name))
         });
         if looks_free_text
             && kept

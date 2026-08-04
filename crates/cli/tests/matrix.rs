@@ -89,14 +89,12 @@ struct ComboResult {
 
 fn run_combo(mode: &str, style: &str, engine: &str, dir: &Path) -> ComboResult {
     std::fs::create_dir_all(dir).unwrap();
-    let mut engine_args: Vec<String> = Vec::new();
+    // Always name the engine explicitly: the default is `auto`, which would
+    // resolve to wasm whenever a worker module exists and silently turn the
+    // native/wasm parity check into wasm-vs-wasm.
+    let mut engine_args: Vec<String> = vec!["--engine".into(), engine.into()];
     if engine == "wasm" {
-        engine_args.extend([
-            "--engine".into(),
-            "wasm".into(),
-            "--worker".into(),
-            worker_wasm().to_str().unwrap().into(),
-        ]);
+        engine_args.extend(["--worker".into(), worker_wasm().to_str().unwrap().into()]);
     }
 
     if style == "single" {

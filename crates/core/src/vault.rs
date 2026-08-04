@@ -18,7 +18,7 @@
 use std::io::{BufRead, Write};
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
-use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
@@ -141,7 +141,7 @@ impl<W: Write> EncryptedVault<W> {
     pub fn new(writer: W, vault_key: &[u8; 32], dataset: &str) -> Self {
         Self {
             writer,
-            cipher: XChaCha20Poly1305::new(Key::from_slice(vault_key)),
+            cipher: XChaCha20Poly1305::new(&(*vault_key).into()),
             nonce_key: *vault_key,
             dataset: dataset.to_string(),
             entries: std::collections::BTreeMap::new(),
@@ -167,7 +167,7 @@ impl<W: Write> EncryptedVault<W> {
         let ciphertext = self
             .cipher
             .encrypt(
-                XNonce::from_slice(&nonce),
+                &XNonce::from(nonce),
                 Payload {
                     msg: &plaintext,
                     aad: aad.as_bytes(),
@@ -230,7 +230,7 @@ pub fn read_vault<R: BufRead>(
     reader: R,
     vault_key: &[u8; 32],
 ) -> Result<Vec<MappingEntry>, CoreError> {
-    let cipher = XChaCha20Poly1305::new(Key::from_slice(vault_key));
+    let cipher = XChaCha20Poly1305::new(&(*vault_key).into());
     let mut lines = reader.lines();
     let header_line = lines
         .next()
@@ -261,13 +261,14 @@ pub fn read_vault<R: BufRead>(
         }
         let parsed: VaultLine = serde_json::from_str(&line)
             .map_err(|e| CoreError::Vault(format!("invalid vault line {}: {e}", i + 2)))?;
-        let nonce = unhex(&parsed.n)
+        let nonce: [u8; 24] = unhex(&parsed.n)
+            .and_then(|bytes| bytes.try_into().ok())
             .ok_or_else(|| CoreError::Vault(format!("invalid nonce on line {}", i + 2)))?;
         let ciphertext = unhex(&parsed.c)
             .ok_or_else(|| CoreError::Vault(format!("invalid ciphertext on line {}", i + 2)))?;
         let plaintext = cipher
             .decrypt(
-                XNonce::from_slice(&nonce),
+                &XNonce::from(nonce),
                 Payload {
                     msg: &ciphertext,
                     aad: aad.as_bytes(),

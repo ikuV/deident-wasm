@@ -218,7 +218,7 @@ patterns:
         Mode::Anonymize,
         &policy,
         "notes\nhello\n".as_bytes(),
-        &mut Vec::new(),
+        Vec::new(),
         &mut NoopVault,
     )
     .unwrap_err();

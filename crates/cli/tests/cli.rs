@@ -102,7 +102,7 @@ fn anonymize_through_wasm_sandbox_matches_native() {
     let wasm_out = tmp.path().join("wasm.csv");
 
     for (engine_args, out) in [
-        (vec![], &native_out),
+        (vec!["--engine", "native"], &native_out),
         (vec!["--engine", "wasm", "--worker", worker.to_str().unwrap()], &wasm_out),
     ] {
         deident()

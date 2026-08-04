@@ -211,7 +211,7 @@ pub fn luhn_valid(value: &str) -> bool {
             }
         })
         .sum();
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 /// Whether `value` satisfies the IBAN mod-97 checksum.

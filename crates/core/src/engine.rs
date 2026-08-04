@@ -226,7 +226,7 @@ pub fn run_job<R: Read, W: Write + Send>(
     let headers = reader.headers()?;
 
     for field in &policy.fields {
-        if !headers.iter().any(|h| *h == field.name) {
+        if !headers.contains(&field.name) {
             warnings.push(format!(
                 "policy field '{}' does not exist in the input and was ignored",
                 field.name
