@@ -437,18 +437,22 @@ cargo clippy --workspace --all-targets
 cargo test -p deident-cli --test matrix   # just the feature-combination matrix
 ```
 
-CI (GitHub Actions):
+CI (GitHub Actions) — two workflows with no overlapping work:
 
-- `rust.yml` — build, clippy (`-D warnings`) and the full test suite on every
-  push/PR to main.
-- `feature-matrix.yml` — runs every mode × engine × single/chain combination
-  against the sample dataset on Linux and macOS whenever anything under
-  `examples/` changes (plus a manual "Run workflow" button). The matrix test
-  recomputes its expectations from the data itself — determinism, native/wasm
+- `rust.yml` — build, clippy (`-D warnings`) and the test suite on every
+  push/PR to main. It skips the feature matrix, which the second workflow
+  owns.
+- `feature-matrix.yml` — every mode × engine × single/chain combination
+  against the sample dataset, triggered by changes under `examples/` or
+  `crates/` (plus a manual "Run workflow" button). The matrix test recomputes
+  its expectations from the data itself — determinism, native/wasm
   byte-parity, identifier survival, pattern counts, chain linkage — so editing
   the sample dataset automatically re-validates every feature against it.
   The full-feature policy it uses is
   [examples/policies/patients-full.yaml](examples/policies/patients-full.yaml).
+
+Note that CI runs the latest stable Rust, which may lint more strictly than an
+older local toolchain; run clippy with `-D warnings` locally to match it.
 
 ## Roadmap
 

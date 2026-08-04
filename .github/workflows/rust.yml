@@ -30,5 +30,8 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Run tests
-        run: cargo test --workspace
+      # The feature-combination matrix is owned by the "Feature matrix"
+      # workflow; skipping it here keeps this gate fast and avoids paying for
+      # the same 8 mode × engine × style runs twice.
+      - name: Run tests (excluding the feature matrix)
+        run: cargo test --workspace -- --skip every_feature_in_every_combination
