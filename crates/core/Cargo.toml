@@ -27,3 +27,7 @@ default = ["parquet"]
 # Apache Parquet input/output. Adds the arrow/parquet stack; disable it for
 # lean builds (the wasm worker keeps it on — arrow compiles to wasm32-wasip1).
 parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema", "dep:arrow-cast", "dep:bytes"]
+
+[dev-dependencies]
+# Only for file-based integration tests; never compiled into the wasm guest.
+tempfile = { workspace = true }

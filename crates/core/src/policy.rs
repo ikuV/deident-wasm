@@ -91,10 +91,18 @@ pub struct KeySource {
     /// Name of an environment variable holding the secret (preferred).
     #[serde(default)]
     pub env: Option<String>,
-    /// Inline fallback secret. Demos/tests only — a warning is recorded in
-    /// the report whenever it is used.
+    /// Inline secret. Demos and tests only — a warning is recorded in the report
+    /// whenever it is used.
     #[serde(default)]
     pub inline: Option<String>,
+    /// Permit falling back to `inline` when `env` is unset or empty.
+    ///
+    /// Off by default: a silent fallback turns a misconfigured deployment into a
+    /// successful job whose tokens anyone with the policy file can reverse, and
+    /// changes every token value in the process. Opting in makes that a decision
+    /// rather than an accident.
+    #[serde(default)]
+    pub allow_inline_fallback: bool,
 }
 
 /// Handling of input columns not listed in the policy.

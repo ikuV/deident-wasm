@@ -16,6 +16,7 @@ serde_yaml = { workspace = true }
 blake3 = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

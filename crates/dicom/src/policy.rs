@@ -457,7 +457,7 @@ mod tests {
 version: 1
 kind: dicom
 dataset: study-1
-key: { inline: "s" }
+key: { inline: "s-0123456789abcdef0123456789abcdef" }
 profile: basic
 tags:
   - tag: PatientName

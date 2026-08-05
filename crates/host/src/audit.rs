@@ -43,6 +43,12 @@ pub struct AuditRecord {
     pub error: Option<String>,
     /// Sandbox limits in effect, when the wasm engine ran the job.
     pub limits: Option<AuditLimits>,
+    /// Whether the report was authored by the host or taken from the guest.
+    ///
+    /// A guest-attested report is a *claim*: a compromised worker could state
+    /// clean row counts over untransformed data. Recording the provenance lets a
+    /// downstream consumer weigh it.
+    pub report_provenance: String,
 }
 
 /// Sandbox limits recorded alongside a job.
@@ -76,8 +82,9 @@ impl AuditLog {
         response: &JobResponse,
         engine: &str,
         limits: Option<AuditLimits>,
+        provenance: &str,
     ) -> anyhow::Result<()> {
-        self.append(&build_record(request, response, engine, limits))
+        self.append(&build_record(request, response, engine, limits, provenance))
     }
 
     /// Append a prepared record as one JSON line.
@@ -99,9 +106,52 @@ impl AuditLog {
     }
 }
 
-/// Fingerprint of a policy document: first 32 hex chars of its BLAKE3 hash.
+/// Fingerprint of a policy document: the first 32 hex chars of a BLAKE3 hash
+/// taken **after removing the key block**.
+///
+/// Hashing the raw text would commit to `key.inline`, turning this log — which
+/// the module documents as safe to ship to a SIEM — into an offline key-recovery
+/// oracle: guess a secret, rebuild the YAML, compare 128 bits. SIEM readers are a
+/// far wider audience than policy-file readers, which is the whole point of
+/// exporting logs.
+///
+/// The fingerprint still identifies the policy, because everything that decides
+/// what happens to the data is still hashed.
 pub fn policy_hash(policy_yaml: &str) -> String {
-    blake3::hash(policy_yaml.as_bytes()).to_hex()[..32].to_string()
+    let canonical = match deident_core::Policy::from_yaml(policy_yaml) {
+        Ok(mut policy) => {
+            policy.key = None;
+            serde_yaml::to_string(&policy).unwrap_or_else(|_| policy_yaml.to_string())
+        }
+        // Unparsable policies never run, so a raw hash of one leaks nothing that
+        // a successful job would.
+        Err(_) => policy_yaml.to_string(),
+    };
+    blake3::hash(canonical.as_bytes()).to_hex()[..32].to_string()
+}
+
+/// Longest failure message an audit record will carry.
+const MAX_AUDIT_ERROR: usize = 300;
+
+/// Trim a failure message for the audit log.
+///
+/// Failure text is assembled from whatever went wrong, so it can quote a policy
+/// value or a fragment of the input — a serde error naming an unexpected enum
+/// variant, a format error naming a column. The audit log is a long-lived file,
+/// often kept where the data is not, so it records a bounded, single-line
+/// summary; the operator still sees the full message on stderr and in the job
+/// report.
+fn audit_error(error: &str) -> String {
+    let single_line: String = error
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    let count = single_line.chars().count();
+    if count <= MAX_AUDIT_ERROR {
+        return single_line;
+    }
+    let kept: String = single_line.chars().take(MAX_AUDIT_ERROR).collect();
+    format!("{kept}… (truncated, {count} characters)")
 }
 
 fn build_record(
@@ -109,6 +159,7 @@ fn build_record(
     response: &JobResponse,
     engine: &str,
     limits: Option<AuditLimits>,
+    provenance: &str,
 ) -> AuditRecord {
     let (status, dataset, rows_read, rows_written, warnings, error) = match &response.outcome {
         JobOutcome::Succeeded { report } => (
@@ -119,11 +170,14 @@ fn build_record(
             Some(report.warnings.len()),
             None,
         ),
-        JobOutcome::Failed { error } => ("failed", None, None, None, None, Some(error.clone())),
+        JobOutcome::Failed { error } => {
+            ("failed", None, None, None, None, Some(audit_error(error)))
+        }
     };
     AuditRecord {
         timestamp: utc_timestamp(),
         tool_version: deident_types::VERSION.to_string(),
+        report_provenance: provenance.to_string(),
         job_id: request.job_id.clone(),
         mode: request.mode,
         engine: engine.to_string(),
@@ -166,6 +220,30 @@ fn utc_timestamp() -> String {
 }
 
 #[cfg(test)]
+mod error_tests {
+    use super::*;
+
+    #[test]
+    fn a_short_error_is_kept_verbatim() {
+        assert_eq!(audit_error("cannot open input"), "cannot open input");
+    }
+
+    #[test]
+    fn newlines_never_break_the_jsonl_shape() {
+        assert_eq!(audit_error("line one\nline two\r\tx"), "line one line two  x");
+    }
+
+    #[test]
+    fn a_long_error_cannot_dump_the_policy_into_the_log() {
+        let error = format!("invalid policy YAML: {}", "secret-ish-value ".repeat(80));
+        let recorded = audit_error(&error);
+        assert!(recorded.chars().count() < 340, "{}", recorded.chars().count());
+        assert!(recorded.contains("truncated"));
+        assert!(recorded.starts_with("invalid policy YAML:"), "keeps the useful prefix");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -186,5 +264,26 @@ mod tests {
         assert_eq!(policy_hash("version: 1"), policy_hash("version: 1"));
         assert_ne!(policy_hash("version: 1"), policy_hash("version: 2"));
         assert_eq!(policy_hash("x").len(), 32);
+    }
+
+    /// The fingerprint must not commit to the secret, or the audit log becomes a
+    /// key-recovery oracle for anyone with SIEM access.
+    #[test]
+    fn policy_hash_ignores_the_key_block() {
+        let with = |secret: &str| {
+            format!(
+                "version: 1\ndataset: d\nkey:\n  inline: \"{secret}\"\n\
+                 fields:\n  - {{ name: id, class: utility }}\n"
+            )
+        };
+        assert_eq!(
+            policy_hash(&with("secret-one-0123456789abcdef0123456")),
+            policy_hash(&with("secret-two-0123456789abcdef0123456")),
+            "two policies differing only in their secret must fingerprint alike"
+        );
+        // But a change that affects the DATA must change the fingerprint.
+        let a = "version: 1\ndataset: d\nfields:\n  - { name: id, class: utility }\n";
+        let b = "version: 1\ndataset: d\nfields:\n  - { name: id, class: direct_identifier }\n";
+        assert_ne!(policy_hash(a), policy_hash(b));
     }
 }

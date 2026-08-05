@@ -78,8 +78,10 @@ struct DicomArgs {
 
 #[derive(Args)]
 struct JobArgs {
-    /// Input file (.csv, .jsonl, .parquet).
-    input: PathBuf,
+    /// Input file(s) (.csv, .jsonl, .parquet). Pass several to process them
+    /// concurrently, each in its own sandbox; `--out` then names a directory.
+    #[arg(required = true, num_args = 1..)]
+    input: Vec<PathBuf>,
     /// Policy YAML describing field classes and strategies.
     #[arg(long)]
     policy: PathBuf,
@@ -92,6 +94,18 @@ struct JobArgs {
     /// Write an encrypted mapping vault (re-identification material) here.
     #[arg(long)]
     vault: Option<PathBuf>,
+
+    /// Split one dataset into N pieces and run each in its own sandbox, in
+    /// parallel. Line-oriented formats only (.csv/.jsonl). The report's
+    /// equivalence-class statistics are recomputed over the combined output
+    /// rather than summed across chunks, which would overstate risk.
+    #[arg(long, default_value_t = 1, value_name = "N")]
+    split: usize,
+
+    /// Maximum jobs running at once (each holds its own sandbox).
+    /// Defaults to one per core, capped at 8.
+    #[arg(long, value_name = "N")]
+    jobs: Option<usize>,
 
     #[command(flatten)]
     lint: LintPolicyArgs,
@@ -281,38 +295,109 @@ fn run_job(mode: Mode, args: &JobArgs) -> anyhow::Result<ExitCode> {
         return Ok(code);
     }
 
-    let request = JobRequest {
-        job_id: uuid::Uuid::new_v4().to_string(),
-        mode,
-        policy_yaml,
-        input_path: path_to_string(&args.input)?,
-        output_path: path_to_string(&args.out)?,
-        report_path: args.report.as_deref().map(path_to_string).transpose()?,
-        vault_path: args.vault.as_deref().map(path_to_string).transpose()?,
-    };
+    let multiple = args.input.len() > 1;
+    if multiple {
+        anyhow::ensure!(
+            args.split <= 1,
+            "--split applies to a single dataset; with several inputs each already gets its own \
+             sandbox and they run concurrently"
+        );
+        anyhow::ensure!(
+            args.report.is_none() && args.vault.is_none(),
+            "--report and --vault name one file; with several inputs the per-dataset artifacts \
+             would overwrite each other. Run the datasets separately, or use `deident chain`"
+        );
+        anyhow::ensure!(
+            args.out.is_dir() || !args.out.exists(),
+            "with several inputs --out must be a directory, not an existing file"
+        );
+        std::fs::create_dir_all(&args.out).with_context(|| {
+            format!("cannot create output directory '{}'", args.out.display())
+        })?;
+    }
+
+    // Build one request per input. With several inputs the output keeps the
+    // input's file name inside the --out directory.
+    let mut requests = Vec::with_capacity(args.input.len());
+    for input in &args.input {
+        let output = if multiple {
+            let name = input
+                .file_name()
+                .context("an input path must have a file name")?;
+            args.out.join(name)
+        } else {
+            args.out.clone()
+        };
+        requests.push(JobRequest {
+            job_id: uuid::Uuid::new_v4().to_string(),
+            mode,
+            policy_yaml: policy_yaml.clone(),
+            input_path: path_to_string(input)?,
+            output_path: path_to_string(&output)?,
+            report_path: args.report.as_deref().map(path_to_string).transpose()?,
+            vault_path: args.vault.as_deref().map(path_to_string).transpose()?,
+        });
+    }
 
     // The sandbox build has no Parquet support (it would bloat the guest
     // module), so an `auto` run involving Parquet must stay in-process.
-    let needs_native = [&request.input_path, &request.output_path]
+    let needs_native = requests
         .iter()
-        .any(|path| is_parquet(path));
+        .any(|r| is_parquet(&r.input_path) || is_parquet(&r.output_path));
     let engine = build_engine_for(&args.engine, needs_native)?;
     let audit = args.engine.audit_log.as_ref().map(AuditLog::new);
-    let response = match &audit {
-        Some(log) => AuditedEngine::new(engine.as_ref(), log.clone()).run(&request)?,
-        None => engine.run(&request)?,
+    let concurrency = args.jobs.unwrap_or_else(deident_host::parallel::default_concurrency);
+
+    let responses: Vec<anyhow::Result<deident_types::JobResponse>> = match &audit {
+        Some(log) => {
+            let audited = AuditedEngine::new(engine.as_ref(), log.clone());
+            dispatch(&requests, &audited, args, concurrency)
+        }
+        None => dispatch(&requests, engine.as_ref(), args, concurrency),
     };
 
-    match response.outcome {
-        JobOutcome::Succeeded { report } => {
-            print_summary(mode, args, &report);
-            Ok(ExitCode::SUCCESS)
-        }
-        JobOutcome::Failed { error } => {
-            eprintln!("error: job {} failed: {error}", response.job_id);
-            Ok(ExitCode::FAILURE)
+    let mut failures = 0;
+    for (request, response) in requests.iter().zip(responses) {
+        match response {
+            Ok(deident_types::JobResponse {
+                outcome: JobOutcome::Succeeded { report },
+                ..
+            }) => print_summary(mode, args, &request.output_path, &report),
+            Ok(deident_types::JobResponse {
+                outcome: JobOutcome::Failed { error },
+                ..
+            }) => {
+                failures += 1;
+                eprintln!("error: '{}' failed: {error}", request.input_path);
+            }
+            Err(err) => {
+                failures += 1;
+                eprintln!("error: '{}' failed: {err:#}", request.input_path);
+            }
         }
     }
+    Ok(if failures == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+/// Run the prepared requests: split a single dataset, or run several at once.
+fn dispatch<E: Engine + Sync + ?Sized>(
+    requests: &[JobRequest],
+    engine: &E,
+    args: &JobArgs,
+    concurrency: usize,
+) -> Vec<anyhow::Result<deident_types::JobResponse>> {
+    if requests.len() == 1 && args.split > 1 {
+        let options = deident_host::ParallelOptions {
+            chunks: args.split,
+            max_concurrency: concurrency,
+        };
+        return vec![deident_host::run_split(&requests[0], engine, &options)];
+    }
+    deident_host::run_many(requests, engine, concurrency)
 }
 
 fn run_chain(args: &ChainArgs) -> anyhow::Result<ExitCode> {
@@ -509,6 +594,14 @@ fn load_vault(vault_path: &Path, policy_path: &Path) -> anyhow::Result<Vec<Mappi
 fn run_vault(args: &VaultArgs) -> anyhow::Result<ExitCode> {
     match &args.command {
         VaultCommand::Export(args) => {
+            if let Some(out) = &args.out {
+                // Exporting over the vault would replace encrypted material with
+                // the plaintext table it protects.
+                deident_core::runner::refuse_in_place(
+                    &path_to_string(&args.vault)?,
+                    &path_to_string(out)?,
+                )?;
+            }
             let entries = load_vault(&args.vault, &args.policy)?;
             let mut writer: Box<dyn std::io::Write> = match &args.out {
                 Some(path) => Box::new(std::io::BufWriter::new(
@@ -524,13 +617,23 @@ fn run_vault(args: &VaultArgs) -> anyhow::Result<ExitCode> {
             }
             csv.flush()?;
             drop(csv);
-            if let Some(path) = &args.out {
-                eprintln!(
-                    "Exported {} mapping(s) to {} — this file is re-identification material.",
-                    entries.len(),
-                    path.display()
-                );
-            }
+            // Flush explicitly: a BufWriter dropped without flushing swallows a
+            // write error after we have already claimed success.
+            writer
+                .flush()
+                .context("cannot flush the exported mappings")?;
+            // Warn unconditionally. Printing this only for --out meant the
+            // invocation most likely to land in a terminal scrollback, a pipe or a
+            // CI log — export to stdout — got no warning at all.
+            eprintln!(
+                "Exported {} mapping(s){} — this is re-identification material: it maps every \
+                 token back to the original value.",
+                entries.len(),
+                args.out
+                    .as_ref()
+                    .map(|p| format!(" to {}", p.display()))
+                    .unwrap_or_else(|| " to stdout".to_string())
+            );
             Ok(ExitCode::SUCCESS)
         }
     }
@@ -789,7 +892,7 @@ fn resolve_worker_module(flag: Option<&Path>) -> anyhow::Result<PathBuf> {
 
 // --- output --------------------------------------------------------------
 
-fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {
+fn print_summary(mode: Mode, args: &JobArgs, output_path: &str, report: &RiskReport) {
     let mode_label = match mode {
         Mode::Pseudonymize => "Pseudonymize",
         Mode::Anonymize => "Anonymize",
@@ -825,7 +928,7 @@ fn print_summary(mode: Mode, args: &JobArgs, report: &RiskReport) {
     for warning in &report.warnings {
         println!("  warning: {warning}");
     }
-    println!("  output: {}", args.out.display());
+    println!("  output: {output_path}");
     if let Some(report_path) = &args.report {
         println!("  report: {}", report_path.display());
     }

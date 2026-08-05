@@ -8,7 +8,7 @@ use deident_types::{JobOutcome, Mode};
 const PATIENTS_POLICY: &str = r#"
 version: 1
 dataset: chain-test
-key: { inline: "chain-test-secret" }
+key: { inline: "chain-test-secret-0123456789abcdef012345" }
 fields:
   - name: patient_id
     class: direct_identifier
@@ -21,7 +21,7 @@ fields:
 const VISITS_POLICY: &str = r#"
 version: 1
 dataset: chain-test
-key: { inline: "chain-test-secret" }
+key: { inline: "chain-test-secret-0123456789abcdef012345" }
 fields:
   - name: visit_id
     class: direct_identifier

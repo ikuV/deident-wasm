@@ -121,7 +121,15 @@ impl<R: Read> CsvReader<R> {
 
 impl<R: Read> RowReader for CsvReader<R> {
     fn headers(&mut self) -> Result<Vec<String>, CoreError> {
-        Ok(self.inner.headers()?.iter().map(str::to_string).collect())
+        let mut headers: Vec<String> =
+            self.inner.headers()?.iter().map(str::to_string).collect();
+        // Excel and many Windows tools prefix a UTF-8 BOM. Left in place it
+        // becomes part of the first column's name, so a policy field naming that
+        // column stops matching and the identifier passes through untransformed.
+        if let Some(first) = headers.first_mut() {
+            strip_bom(first);
+        }
+        Ok(headers)
     }
 
     fn next_row(&mut self) -> Result<Option<Vec<String>>, CoreError> {
@@ -181,7 +189,9 @@ impl<R: Read> JsonlReader<R> {
         let mut pending = None;
         // Skip blank leading lines; the first object defines the schema.
         for line in lines.by_ref() {
-            let line = line?;
+            let mut line = line?;
+            // A BOM sits before the opening brace and makes the line invalid JSON.
+            strip_bom(&mut line);
             if line.trim().is_empty() {
                 continue;
             }
@@ -225,9 +235,13 @@ impl<R: Read> RowReader for JsonlReader<R> {
             let mut row = vec![String::new(); self.headers.len()];
             for (key, value) in object {
                 let Some(index) = self.headers.iter().position(|h| *h == key) else {
+                    // The key comes from the input, so it could itself be personal
+                    // data in a mis-shaped file. Errors travel to logs and audit
+                    // records, so quote it defensively.
                     return Err(CoreError::Format(format!(
-                        "JSONL record {} has key '{key}' that the first record did not declare",
-                        self.row
+                        "JSONL record {} has key '{}' that the first record did not declare",
+                        self.row,
+                        safe_label(&key)
                     )));
                 };
                 row[index] = scalar_to_string(&value, self.row)?;
@@ -235,6 +249,30 @@ impl<R: Read> RowReader for JsonlReader<R> {
             return Ok(Some(row));
         }
         Ok(None)
+    }
+}
+
+/// Remove a leading UTF-8 byte-order mark, in place.
+fn strip_bom(text: &mut String) {
+    if text.starts_with('\u{feff}') {
+        text.remove(0);
+    }
+}
+
+/// Render input-derived text for an error message: printable characters only,
+/// length-capped. Column names are not meant to be secret, but a malformed file
+/// can put anything in that position and error text ends up in logs.
+fn safe_label(text: &str) -> String {
+    const MAX: usize = 48;
+    let cleaned: String = text
+        .chars()
+        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+        .take(MAX)
+        .collect();
+    if cleaned.chars().count() < text.chars().count() {
+        format!("{cleaned}… ({} characters)", text.chars().count())
+    } else {
+        cleaned
     }
 }
 
@@ -405,5 +443,40 @@ mod tests {
         assert_eq!(typed_value("01234"), serde_json::Value::String("01234".into()));
         assert_eq!(typed_value("1234"), serde_json::json!(1234));
         assert_eq!(typed_value("-42"), serde_json::json!(-42));
+    }
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::*;
+
+    #[test]
+    fn a_bom_is_removed_only_from_the_front() {
+        let mut header = "\u{feff}patient_id".to_string();
+        strip_bom(&mut header);
+        assert_eq!(header, "patient_id");
+        // A BOM anywhere else is a real (if odd) character of the name.
+        let mut inner = "pat\u{feff}id".to_string();
+        strip_bom(&mut inner);
+        assert_eq!(inner, "pat\u{feff}id");
+    }
+
+    #[test]
+    fn control_characters_cannot_reach_a_log_line() {
+        // Reachable through formats that permit raw control bytes in a name, so
+        // sanitizing belongs in the label rather than in the JSON parser.
+        assert_eq!(safe_label("bad\u{7}key\nnext"), "bad\u{fffd}key\u{fffd}next");
+    }
+
+    #[test]
+    fn an_over_long_label_is_capped_and_says_so() {
+        let label = safe_label(&"x".repeat(500));
+        assert!(label.chars().count() < 80, "{}", label.chars().count());
+        assert!(label.contains("(500 characters)"), "{label}");
+    }
+
+    #[test]
+    fn a_short_label_is_unchanged() {
+        assert_eq!(safe_label("patient_id"), "patient_id");
     }
 }
