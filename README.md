@@ -116,8 +116,8 @@ deident <COMMAND> [OPTIONS]
 
 | Command | Description |
 |---|---|
-| `pseudonymize <INPUT>` | Reversibly tokenize direct identifiers (deterministic per dataset/policy) |
-| `anonymize <INPUT>` | Irreversibly remove/generalize identifiers and produce a risk report |
+| `pseudonymize <INPUT>...` | Reversibly tokenize direct identifiers (deterministic per dataset/policy) |
+| `anonymize <INPUT>...` | Irreversibly remove/generalize identifiers and produce a risk report |
 | `chain <MANIFEST> --mode <MODE>` | Run several datasets as one chained export ([Chained datasets](#chained-datasets)) |
 | `lint <POLICY>` | Report risky-but-valid policy configurations ([Policy lints](#policy-lints)) |
 | `vault export <VAULT> --policy <FILE>` | Decrypt a mapping vault to CSV ([Mapping vault](#mapping-vault-and-reversal)) |
@@ -129,11 +129,13 @@ Options for `pseudonymize` / `anonymize`:
 
 | Option | Required | Description |
 |---|---|---|
-| `<INPUT>` | yes | Input file; format inferred from the extension (`.csv`, `.jsonl`/`.ndjson`, `.parquet`) |
+| `<INPUT>...` | yes | Input file(s); format inferred from the extension (`.csv`, `.jsonl`/`.ndjson`, `.parquet`). Several inputs run concurrently, one sandbox each ([Parallel execution](#parallel-execution)) |
 | `--policy <FILE>` | yes | Policy YAML describing field classes and strategies |
-| `--out <FILE>` | yes | Output file; its extension selects the output format |
+| `--out <PATH>` | yes | Output file; its extension selects the output format. With several inputs, a **directory** |
 | `--report <FILE>` | no | Write the JSON risk report here |
 | `--vault <FILE>` | no | Write the encrypted mapping vault here (only if the job produces reversible values) |
+| `--split <N>` | no | Split one dataset across `N` sandboxes and merge the results ([Parallel execution](#parallel-execution)) |
+| `--jobs <N>` | no | Maximum sandboxes running at once (default: cores, capped at 8) |
 | `--no-lint` | no | Skip the pre-flight policy lint |
 | `--deny-lints` | no | Refuse to run when a warning-level lint fires |
 
@@ -173,7 +175,7 @@ and output — so a job can convert while it transforms:
 
 | Extension | Format | Notes |
 |---|---|---|
-| `.csv` | CSV | Header row required |
+| `.csv` | CSV | Header row required. A leading UTF-8 BOM (Excel writes one) is stripped, so the first column still matches its policy field |
 | `.jsonl`, `.ndjson` | JSON Lines | One **flat** object per line. The first record defines the columns; later records may omit keys (treated as empty) but not add new ones. Nested objects/arrays are rejected rather than silently flattened. Numbers and booleans keep their JSON type when their value is unchanged; generalized values (`"30-39"`) become strings; empty becomes `null` |
 | `.parquet`, `.pq` | Apache Parquet | Column types are re-inferred from the transformed values, so untouched numeric columns stay `Int64`/`Float64` while generalized ones become `Utf8`. Not available inside the sandbox (see below) |
 
@@ -184,6 +186,19 @@ deident anonymize events.parquet --policy p.yaml --out events.jsonl
 
 Both Parquet directions hold the table in memory (its footer-based layout makes
 true streaming impractical); CSV and JSONL stream row by row.
+
+**Column names are matched exactly.** A policy field that matches no column is
+inert — if it named a direct identifier, that identifier would be copied through in
+the clear. Two things guard against it: the default `on_unlisted: error` fails the
+job on any column the policy does not cover, and an unmatched *field* is reported
+as a warning that names a case- or whitespace-only near miss when one exists
+(`patient_id` vs `Patient_ID`).
+
+**Outputs are published, not written in place.** Each job writes to a temporary
+sibling file and moves it into place only after the transformation has run to
+completion, so a job that fails halfway leaves no truncated file for a downstream
+consumer to mistake for a finished dataset. The same applies to the mapping vault:
+a failed job publishes neither.
 
 ## Sandboxed execution
 
@@ -228,6 +243,72 @@ The worker module is found in this order: `--worker <FILE>`, then
 `$DEIDENT_WORKER_WASM`, then `deident-worker.wasm` next to the `deident`
 binary, then the local cargo build under `target/wasm32-wasip1/`. For
 deployment, copy `deident-worker.wasm` next to the installed binary.
+
+## Parallel execution
+
+Two independent axes, both giving every job its own sandbox with its own `Store`,
+WASI context and resource limits. The guest module is compiled once and shared;
+nothing else is.
+
+**Several datasets at once** — pass more than one input. `--out` then names a
+directory and each output keeps its input's file name:
+
+```bash
+deident pseudonymize patients.csv visits.csv labs.jsonl \
+  --policy policy.yaml --out ./out --jobs 3
+```
+
+Results are reported in the order the inputs were given, whatever order they
+finished in. One dataset failing does not stop the others; the command exits
+non-zero and names the input that failed.
+
+Because `--report` and `--vault` each name a single file, they are refused with
+several inputs — the per-dataset artifacts would overwrite each other. Use
+[`deident chain`](#chained-datasets) when you want per-dataset reports, or run the
+datasets separately.
+
+**One large dataset across N sandboxes** — `--split`:
+
+```bash
+deident pseudonymize huge.csv --policy policy.yaml --out out.csv \
+  --report risk.json --split 8 --jobs 8
+```
+
+The input is divided by rows into `N` staged chunks (each CSV chunk repeats the
+header, so it is a valid file in its own right), each chunk runs in its own
+sandbox, and the outputs are concatenated in order. The result is **byte-identical**
+to an unsplit run — tokens are a deterministic function of the key and the value,
+so chunks agree without coordinating. On a 200k-row file, 8 sandboxes cut wall
+clock roughly 3x.
+
+Constraints:
+
+- **Line-oriented formats only** (`.csv`, `.jsonl`/`.ndjson`). Parquet is columnar
+  with a footer, so a byte range of it is not a valid file.
+- **Not with `--vault`.** Each chunk would write its own vault with overlapping
+  entries, and merging encrypted mapping files is not implemented.
+- `--split` applies to a single dataset. With several inputs each one already gets
+  its own sandbox.
+- Fewer rows than chunks, or `--split 1`, silently runs as one job.
+
+### How a split report is merged
+
+Row counts and pattern-match counts are additive, so they are summed. The
+**equivalence-class statistics are not**, and summing them would be wrong in a way
+that matters:
+
+> A quasi-identifier combination appearing once in chunk A and once in chunk B is
+> one class of size two — not two classes of size one. Summing per-chunk figures
+> would report far more unique rows than the dataset contains, i.e. it would
+> *overstate* re-identification risk, and someone widening their buckets in
+> response would be chasing an artefact of the chunking.
+
+So they are not merged at all. Once the chunk outputs are concatenated, the host
+recomputes them over the **whole** output using the same code path a single-job run
+uses. That costs one extra pass and makes the figures host-attested rather than
+assembled from fragments. A split run's report carries a warning saying so, and its
+`unique_rows`, `equivalence_classes` and `k_thresholds` match an unsplit run
+exactly.
 
 ## Policy reference
 
@@ -505,6 +586,45 @@ deident pseudonymize ...
 unsafe for production. Every run using it records a warning in the report and
 triggers the `inline-key` lint.
 
+### Resolution is fail-closed
+
+A policy may declare both `env` and `inline`. If the named environment variable is
+**unset or empty**, the run **fails** rather than quietly using the inline value:
+
+```yaml
+key:
+  env: DEIDENT_KEY
+  inline: "dev-only-secret-do-not-use-in-production"
+```
+
+```
+$ deident pseudonymize in.csv --policy above.yaml --out out.csv
+error: key error: environment variable 'DEIDENT_KEY' is unset or empty. The policy
+also carries an inline key, but falling back to it silently would tokenize
+production data under a development secret — export the variable, or set
+`key.allow_inline_fallback: true` if that is genuinely what you want
+```
+
+A forgotten `export` would otherwise produce output that *looks* correctly
+pseudonymized but is reversible by anyone holding the policy file, and would not
+join with earlier exports. Opt in explicitly if you want the old behavior:
+
+```yaml
+key:
+  env: DEIDENT_KEY
+  inline: "dev-only-secret-do-not-use-in-production"
+  allow_inline_fallback: true   # demos and tests only
+```
+
+The fallback then happens and is recorded as a warning in the report — identically
+whether the job ran in-process or in the sandbox.
+
+### Strength floor
+
+Secrets shorter than 32 bytes are rejected. Longer secrets that look like
+passphrases (few distinct byte values) are accepted with a warning; prefer
+`openssl rand -hex 32`.
+
 Key material is **purpose-separated**: the vault encryption key is derived from
 the same secret under a different KDF context, so the vault key cannot forge
 tokens and the token key cannot decrypt a vault.
@@ -677,18 +797,30 @@ policy is adequate for your data.
 
 ```json
 {"timestamp":"2026-08-04T09:12:33Z","job_id":"…","mode":"anonymize","engine":"wasm",
- "dataset":"patients-demo","policy_hash":"9f2c…","input_path":"in.csv","output_path":"out.csv",
+ "report_provenance":"host-attested","dataset":"patients-demo","policy_hash":"9f2c…",
+ "input_path":"in.csv","output_path":"out.csv",
  "status":"succeeded","rows_read":12,"rows_written":12,"warnings":1,"error":null,
  "limits":{"max_memory_bytes":268435456,"timeout_ms":30000,"fuel":2000000000}}
 ```
 
 It is deliberately **metadata only** — no cell values — so it can be retained
 and shipped to a SIEM without inheriting the sensitivity of the data it
-describes. `policy_hash` is a BLAKE3 fingerprint of the exact policy text, so
-an auditor can prove which policy produced an output without the log carrying
-the policy itself (which may hold an inline secret). Records are written for
-failed jobs too, and it works identically for native, sandboxed and chained
-runs.
+describes. Specifically:
+
+- `policy_hash` is a BLAKE3 fingerprint of the policy with the `key` block
+  removed, so an auditor can prove which policy produced an output and the
+  fingerprint does not commit to an inline secret.
+- `error` is capped at 300 characters and flattened to one line. Failure text is
+  assembled from whatever went wrong, so it can quote a policy value or a column
+  name from the input; the log keeps a bounded summary while the operator still
+  sees the full message on stderr.
+- `report_provenance` records who authored the risk figures — `host-attested`
+  means the host computed or verified them. A compromised worker could otherwise
+  report clean counts over untransformed data, and a consumer needs to know which
+  it is holding.
+
+Records are written for failed jobs too, and it works identically for native,
+sandboxed, split and chained runs.
 
 ## Chained datasets
 
@@ -822,6 +954,15 @@ The `limitations` block is embedded in every report by design.
   point and also the hazard — the report and lints call this out.
 - The audit log is metadata-only by design; it records what happened, never the
   data it happened to.
+- Risk figures returned from a sandboxed job are **host-attested**: the host
+  re-derives what it owns and verifies what it can cheaply check, because a
+  compromised guest could otherwise report clean counts over untransformed data.
+  The `report_provenance` field states which regime produced a given report.
+- Secrets must be at least 32 bytes, and a policy declaring both `env` and
+  `inline` **fails closed** when the variable is unset — see
+  [Key management](#key-management).
+- A job that fails partway publishes neither its output nor its vault, so a
+  truncated artifact cannot be mistaken for a complete one.
 - Policy lints are heuristics that catch common mistakes. A clean lint run is
   not a compliance statement.
 - Non-goals: differential privacy, synthetic data generation, free-text/NLP
@@ -933,11 +1074,14 @@ older local toolchain; run clippy with `-D warnings` locally to match it.
 Everything on the original roadmap is now implemented. What's next, roughly in
 order of value:
 
-- **Act on the security audit** — see [SECURITY_AUDIT.md](SECURITY_AUDIT.md);
-  the temp-workspace permissions and fail-closed key resolution come first.
 - **Streaming at scale** — Parquet and the equivalence-class statistics hold
-  data in memory. Chunked row-group processing and a spill-to-disk class map
-  would lift the dataset-size ceiling.
+  data in memory. `--split` divides a dataset across sandboxes and lowers peak
+  memory per job, but chunked row-group processing and a spill-to-disk class map
+  would lift the ceiling properly.
+- **Split with a vault** — merging per-chunk encrypted mapping files, so
+  `--split` and `--vault` can be combined.
+- **Parquet in the sandbox** — currently excluded to keep the guest module small;
+  it is also what stops `--split` from accepting Parquet.
 - **Broader DICOM coverage** — extend the tag table toward full Annex E, add the
   profile options (Retain Longitudinal Temporal, Retain Patient Characteristics,
   Retain Safe Private), and sandbox the DICOM parser.

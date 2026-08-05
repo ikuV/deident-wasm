@@ -14,7 +14,7 @@ const BASIC_POLICY: &str = r#"
 version: 1
 kind: dicom
 dataset: test-study
-key: { inline: "dicom-test-secret" }
+key: { inline: "dicom-test-secret-0123456789abcdef012345" }
 profile: basic
 patterns:
   - { name: iban, builtin: iban, action: redact }
@@ -172,7 +172,7 @@ fn phi_nested_inside_a_sequence_is_reached() {
 version: 1
 kind: dicom
 dataset: test-study
-key: { inline: "dicom-test-secret" }
+key: { inline: "dicom-test-secret-0123456789abcdef012345" }
 profile: basic
 tags:
   - { tag: VerifyingObserverSequence, action: keep }
@@ -235,7 +235,7 @@ fn private_attributes_are_removed_by_default_and_retained_on_request() {
 version: 1
 kind: dicom
 dataset: test-study
-key: { inline: "dicom-test-secret" }
+key: { inline: "dicom-test-secret-0123456789abcdef012345" }
 profile: basic
 structural: { retain_safe_private: true }
 "#;
@@ -423,7 +423,10 @@ fn the_vault_records_reversible_mappings_and_holds_no_plaintext() {
     assert!(!raw.contains(PHI.study_uid));
 
     // Decrypt and confirm the UID and patient mappings are recoverable.
-    let key = deident_core::vault::derive_vault_key(b"dicom-test-secret", "test-study");
+    let key = deident_core::vault::derive_vault_key(
+        b"dicom-test-secret-0123456789abcdef012345",
+        "test-study",
+    );
     let entries =
         deident_core::vault::read_vault(std::io::BufReader::new(
             std::fs::File::open(&vault_path).unwrap(),
@@ -463,7 +466,7 @@ fn clean_text_that_matched_nothing_is_reported() {
 version: 1
 kind: dicom
 dataset: test-study
-key: { inline: "dicom-test-secret" }
+key: { inline: "dicom-test-secret-0123456789abcdef012345" }
 profile: none
 tags:
   - { tag: StudyDescription, action: clean_text }
@@ -526,7 +529,7 @@ fn multi_valued_attributes_are_de_identified_value_by_value() {
 version: 1
 kind: dicom
 dataset: vm-test
-key: { inline: "vm-secret" }
+key: { inline: "vm-secret-0123456789abcdef0123456789abcd" }
 profile: basic
 tags:
   - { tag: OtherPatientIDs, action: pseudonymize, domain: opid, prefix: "OP-" }
@@ -598,7 +601,7 @@ fn multi_valued_uids_remap_consistently_and_are_counted_individually() {
 version: 1
 kind: dicom
 dataset: vm-uid-test
-key: { inline: "vm-uid-secret" }
+key: { inline: "vm-uid-secret-0123456789abcdef0123456789" }
 profile: basic
 "#;
     let tmp = tempfile::tempdir().unwrap();
@@ -648,7 +651,7 @@ profile: basic
 fn file_meta_follows_the_dataset_for_any_action() {
     for action in ["pseudonymize", "replace\n    value: \"1.2.3.4.5.6\""] {
         let policy_yaml = format!(
-            "version: 1\nkind: dicom\ndataset: meta-test\nkey: {{ inline: \"s\" }}\n\
+            "version: 1\nkind: dicom\ndataset: meta-test\nkey: {{ inline: \"s-0123456789abcdef0123456789abcdef\" }}\n\
              profile: basic\ntags:\n  - tag: SOPInstanceUID\n    action: {action}\n"
         );
         let tmp = tempfile::tempdir().unwrap();
@@ -665,5 +668,129 @@ fn file_meta_follows_the_dataset_for_any_action() {
             meta, PHI.sop_instance_uid,
             "action {action:?}: the original UID must not survive in the header"
         );
+    }
+}
+
+/// Only `remove` used to be honoured on a sequence; every other action was
+/// dropped after recursion, so `empty` did nothing and reported "0 modified".
+#[test]
+fn actions_on_a_sequence_are_applied_or_explained() {
+    let empty_sequence = r#"
+version: 1
+kind: dicom
+dataset: seq-test
+key: { inline: "seq-secret-0123456789abcdef0123456789" }
+profile: basic
+tags:
+  - { tag: VerifyingObserverSequence, action: empty }
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("in.dcm");
+    let output = tmp.path().join("out.dcm");
+    synthetic::write_instance(&input, &InstanceOptions::default()).unwrap();
+
+    let report =
+        deidentify_file(&input, &output, &policy(empty_sequence), &RunOptions::default()).unwrap();
+    let object = dicom_object::open_file(&output).unwrap();
+    let items = object
+        .element(tags::VERIFYING_OBSERVER_SEQUENCE)
+        .expect("the sequence itself is retained")
+        .items()
+        .expect("a sequence");
+    assert!(items.is_empty(), "`empty` must drop the sequence's items");
+    assert!(
+        report.tags.iter().any(|t| t.tag == "VerifyingObserverSequence"),
+        "the action must be reported: {:?}",
+        report.tags
+    );
+    assert!(!contains(&raw_bytes(&output), PHI.nested_observer));
+
+    // A value-level action cannot apply to a sequence, and must say so rather
+    // than appear to have worked.
+    let text_on_sequence = empty_sequence.replace("action: empty", "action: clean_text");
+    let out2 = tmp.path().join("out2.dcm");
+    let report =
+        deidentify_file(&input, &out2, &policy(&text_on_sequence), &RunOptions::default()).unwrap();
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("cannot apply to a sequence")),
+        "an inapplicable action must be surfaced: {:?}",
+        report.warnings
+    );
+}
+
+/// Writing text into a binary VR reinterprets the bytes: `Rows` came back as
+/// 28526\24948\30062, destroying the image geometry while the report said
+/// "replaced".
+#[test]
+fn text_actions_refuse_binary_attributes_instead_of_corrupting_them() {
+    let policy_yaml = r#"
+version: 1
+kind: dicom
+dataset: vr-test
+key: { inline: "vr-secret-0123456789abcdef0123456789ab" }
+profile: basic
+tags:
+  - { tag: Rows, action: replace, value: "notanumber" }
+  - { tag: BitsAllocated, action: pseudonymize }
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("in.dcm");
+    let output = tmp.path().join("out.dcm");
+    synthetic::write_instance(&input, &InstanceOptions::default()).unwrap();
+
+    let report =
+        deidentify_file(&input, &output, &policy(policy_yaml), &RunOptions::default()).unwrap();
+
+    // `pseudonymize` is a value-level action and must be refused with a warning.
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("BitsAllocated") && w.contains("binary")),
+        "a text action on a binary VR must warn: {:?}",
+        report.warnings
+    );
+    // Geometry survives intact.
+    assert_eq!(value_of(&output, tags::BITS_ALLOCATED).as_deref(), Some("8"));
+}
+
+/// A date near a calendar bound must not shift into an impossible year: a `DA`
+/// value is exactly eight digits.
+#[test]
+fn date_shift_never_emits_an_out_of_range_year() {
+    use dicom_core::{DataElement, VR, value::PrimitiveValue};
+    let policy_yaml = r#"
+version: 1
+kind: dicom
+dataset: da-test
+key: { inline: "da-secret-0123456789abcdef0123456789ab" }
+profile: basic
+tags:
+  - { tag: StudyDate, action: date_shift, max_days: 3650, domain: patient }
+"#;
+    let tmp = tempfile::tempdir().unwrap();
+    for (i, extreme) in ["00010102", "99991231"].iter().enumerate() {
+        let input = tmp.path().join(format!("in{i}.dcm"));
+        let output = tmp.path().join(format!("out{i}.dcm"));
+        let mut object = synthetic::instance(&InstanceOptions::default());
+        object.put(DataElement::new(
+            tags::STUDY_DATE,
+            VR::DA,
+            PrimitiveValue::from(*extreme),
+        ));
+        object.write_to_file(&input).unwrap();
+
+        deidentify_file(&input, &output, &policy(policy_yaml), &RunOptions::default()).unwrap();
+        // Either dropped, or a valid 8-digit DA — never something like -0080804.
+        if let Some(value) = value_of(&output, tags::STUDY_DATE) {
+            assert_eq!(value.len(), 8, "invalid DA emitted for {extreme}: {value:?}");
+            assert!(
+                value.bytes().all(|b| b.is_ascii_digit()),
+                "invalid DA emitted for {extreme}: {value:?}"
+            );
+        }
     }
 }

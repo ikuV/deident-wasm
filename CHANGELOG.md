@@ -8,10 +8,75 @@ more than the crate version for anyone holding existing outputs.
 
 ## [Unreleased]
 
+### Added
+
+- **Parallel execution.** Two independent axes, each giving every job its own
+  sandbox (fresh `Store`, WASI context and limits); the guest module is compiled
+  once and shared, nothing else is.
+
+  - **Several datasets at once** — `deident pseudonymize a.csv b.csv c.jsonl
+    --out ./dir`. Results are reported in input order whatever order they finish
+    in, and one dataset failing does not stop the others.
+  - **One large dataset across N sandboxes** — `--split N`. Output is
+    **byte-identical** to an unsplit run, since tokens are a deterministic
+    function of the key and the value. On a 200k-row CSV, 8 sandboxes cut wall
+    clock roughly 3x.
+  - `--jobs N` caps concurrency (default: cores, capped at 8).
+
+  The interesting part is the report merge. Row and pattern counts are additive,
+  but the **equivalence-class statistics are not**: a quasi-identifier combination
+  appearing once in chunk A and once in chunk B is one class of size two, not two
+  classes of size one. Summing them would *overstate* re-identification risk, and
+  someone widening their buckets in response would be chasing an artefact of the
+  chunking. So they are not merged — after the chunk outputs are concatenated the
+  host recomputes them over the whole output through the same code path a
+  single-job run uses. A split report says so in a warning, and tests pin its
+  `unique_rows`, `equivalence_classes` and `k_thresholds` to the unsplit figures.
+
+  Refused rather than approximated: `--split` with Parquet (columnar, so a byte
+  range is not a valid file) and `--split` with `--vault` (each chunk would write
+  its own vault with overlapping entries).
+
+- A deterministic dataset generator
+  (`cargo run -p deident-core --example gen_dataset`) producing four
+  referentially-consistent tables with an engineered quasi-identifier
+  distribution, plus `clinic-messy.csv` containing real-world damage (BOM,
+  mixed-case headers, unparsable dates, Luhn-failing card shapes, zero-padded
+  identifiers). See the README's *Example datasets*.
+
+### Security
+
+Acting on [SECURITY_AUDIT.md](SECURITY_AUDIT.md):
+
+- **Key resolution is now fail-closed.** A policy declaring both `key.env` and
+  `key.inline` used to fall back to the inline value when the variable was unset.
+  A forgotten `export` therefore produced output that looked correctly
+  pseudonymized but was reversible by anyone holding the policy, and did not join
+  with earlier exports. The run now fails; `key.allow_inline_fallback: true` opts
+  back in explicitly, and the fallback is then reported identically by both
+  engines. **Breaking** for policies that relied on the old behavior.
+- **Minimum secret length of 32 bytes**, with a warning for long-but-low-entropy
+  passphrases.
+- **Reports from a sandboxed job are host-attested.** The host re-derives what it
+  owns and verifies what it can cheaply check, rather than trusting figures a
+  guest authored — a compromised worker could otherwise report clean counts over
+  untransformed data. The new `report_provenance` field states which regime
+  produced a report.
+- **`policy_hash` no longer commits to an inline secret**: the key block is
+  removed before hashing, so the fingerprint still identifies the policy but the
+  audit log cannot be used to confirm a guessed secret.
+- Per-job sandbox workspaces are created `0700` and staged files `0600`; only the
+  one key variable the policy names is passed into the guest; collected artifacts
+  are rejected if they are symlinks.
+- **The audit log's `error` field is capped** at 300 characters and flattened to
+  one line. Failure text is assembled from whatever went wrong, so it could quote
+  a policy value or a column name into a long-lived file kept where the data is
+  not; the full message still goes to stderr.
+
 ### Fixed
 
-Two bug-hunting passes over the workspace produced 24 verified findings; these
-are the ones fixed so far.
+Two bug-hunting passes over the workspace produced 24 verified findings. All of
+them are fixed.
 
 **DICOM multi-valued attributes** — DICOM attributes are frequently multi-valued
 (`ID-1\ID-2\ID-3`), and the engine treated the backslash-joined string as one
@@ -92,15 +157,27 @@ scalar. Consequences, all now fixed by applying each action **value by value**:
 - `chain` ran no policy lints and `--deny-lints` was a hard argument error; it
   also lacked the Parquet native fallback that single jobs have.
 - `uids_remapped` counted distinct *tags* rather than distinct UIDs.
-
-### Added
-
-- A deterministic dataset generator
-  (`cargo run -p deident-core --example gen_dataset`) producing four
-  referentially-consistent tables with an engineered quasi-identifier
-  distribution, plus `clinic-messy.csv` containing real-world damage (BOM,
-  mixed-case headers, unparsable dates, Luhn-failing card shapes, zero-padded
-  identifiers). See the README's *Example datasets*.
+- **A job that failed partway left its partial output on disk**, where a
+  downstream consumer would read it as a complete, transformed dataset. Output and
+  vault are now written to a temporary sibling file and moved into place only after
+  the job runs to completion; a failure publishes neither.
+- **A UTF-8 BOM broke the first column.** Excel and many Windows tools prefix one,
+  which made the first header `\u{feff}patient_id` — so a policy field naming that
+  column matched nothing. Under the default `on_unlisted: error` the job failed
+  confusingly; under `on_unlisted: keep` the identifier was copied through in the
+  clear. The BOM is now stripped from CSV headers and from a leading JSONL line.
+- **An unmatched policy field is now diagnosed, not just mentioned.** When the only
+  difference is case or surrounding whitespace (`patient_id` vs `Patient_ID`) the
+  warning names the actual column and states that the rule was *not* applied; when
+  the field named a direct identifier, it says the data was copied through
+  unchanged.
+- Two engines disagreed about the same job: the sandbox host mirrored the
+  inline-key fallback warning into every report, including anonymize-only jobs that
+  never resolve a key. Both engines now share one `needs_key` predicate rather than
+  each deciding for itself.
+- A JSONL record declaring an undeclared key put that key verbatim into the error
+  message, which travels to logs and audit records. Keys are input-derived, so the
+  label is now length-capped with control characters replaced.
 
 ## [0.2.0] — 2026-08-04
 

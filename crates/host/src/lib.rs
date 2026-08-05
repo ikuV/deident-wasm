@@ -8,15 +8,21 @@ use deident_types::{JobRequest, JobResponse};
 
 pub mod audit;
 pub mod chain;
+pub mod parallel;
 pub mod wasm;
 
 pub use audit::{AuditLimits, AuditLog, AuditRecord};
 pub use chain::{ChainManifest, run_chain};
+pub use parallel::{ParallelOptions, run_many, run_split};
 pub use wasm::{WasmEngine, WasmLimits};
 
 /// Runs one job to completion. Implementations must be safe to reuse across
 /// jobs but must not share per-job state.
-pub trait Engine {
+///
+/// `Send + Sync` is required because the parallel paths share one engine across
+/// worker threads — that is the point of compiling the guest module once and
+/// giving each job only its own `Store`.
+pub trait Engine: Send + Sync {
     fn run(&self, request: &JobRequest) -> anyhow::Result<JobResponse>;
 
     /// Short engine name, recorded in logs and audit records.
@@ -25,6 +31,16 @@ pub trait Engine {
     /// Resource limits this engine enforces, if any.
     fn audit_limits(&self) -> Option<AuditLimits> {
         None
+    }
+
+    /// Who authored the report this engine returns.
+    ///
+    /// `host-attested` means the host computed or verified the figures;
+    /// `guest-attested` means they are a claim made by code running inside the
+    /// sandbox. A compromised worker could report clean counts over untransformed
+    /// data, so a consumer needs to know which it is holding.
+    fn report_provenance(&self) -> &'static str {
+        "host-attested"
     }
 }
 
@@ -77,6 +93,7 @@ impl Engine for AuditedEngine<'_> {
             &record_response,
             self.inner.name(),
             self.inner.audit_limits(),
+            self.inner.report_provenance(),
         ) {
             tracing::error!(error = %err, path = %self.log.path().display(), "cannot write audit record");
         }
@@ -89,5 +106,9 @@ impl Engine for AuditedEngine<'_> {
 
     fn audit_limits(&self) -> Option<AuditLimits> {
         self.inner.audit_limits()
+    }
+
+    fn report_provenance(&self) -> &'static str {
+        self.inner.report_provenance()
     }
 }

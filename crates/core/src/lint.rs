@@ -317,7 +317,7 @@ mod tests {
             r#"
 version: 1
 dataset: d
-key: { inline: "s" }
+key: { inline: "s-0123456789abcdef0123456789abcdef" }
 on_unlisted: keep
 fields:
   - { name: id, class: direct_identifier }

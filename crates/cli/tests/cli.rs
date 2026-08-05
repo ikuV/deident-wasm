@@ -225,7 +225,7 @@ fn vault_export_and_reverse_round_trip() {
         r#"
 version: 1
 dataset: vault-round-trip
-key: { inline: "cli-test-secret" }
+key: { inline: "cli-test-secret-0123456789abcdef01234567" }
 on_unlisted: error
 fields:
   - name: patient_id
@@ -330,8 +330,9 @@ fn reverse_with_the_wrong_key_fails_loudly() {
     };
     let good = tmp.path().join("good.yaml");
     let bad = tmp.path().join("bad.yaml");
-    write_policy(&good, "right-secret");
-    write_policy(&bad, "wrong-secret");
+    // Both must clear the 32-byte key-material floor.
+    write_policy(&good, "right-secret-0123456789abcdef0123456789");
+    write_policy(&bad, "wrong-secret-0123456789abcdef0123456789");
     let input = tmp.path().join("in.csv");
     std::fs::write(&input, "id\nP001\n").unwrap();
     let vault = tmp.path().join("v.jsonl");
@@ -367,7 +368,7 @@ fn lint_reports_and_can_deny() {
     let policy = tmp.path().join("risky.yaml");
     std::fs::write(
         &policy,
-        "version: 1\ndataset: risky\nkey: { inline: \"s\" }\non_unlisted: keep\n\
+        "version: 1\ndataset: risky\nkey: { inline: \"s-0123456789abcdef0123456789abcdef\" }\non_unlisted: keep\n\
          fields:\n  - { name: id, class: direct_identifier }\n  - { name: zip, class: quasi_identifier }\n",
     )
     .unwrap();
@@ -466,7 +467,7 @@ fn dicom_deidentifies_a_study_and_reports_honestly() {
     std::fs::write(
         &policy,
         "version: 1\nkind: dicom\ndataset: cli-dicom-test\n\
-         key: { inline: \"cli-dicom-secret\" }\nprofile: basic\n\
+         key: { inline: \"cli-dicom-secret-0123456789abcdef0123456\" }\nprofile: basic\n\
          patterns:\n  - { name: iban, builtin: iban, action: redact }\n",
     )
     .unwrap();
@@ -618,7 +619,7 @@ fn dicom_vault_can_be_exported_with_its_own_policy() {
     std::fs::write(
         &policy,
         "version: 1\nkind: dicom\ndataset: vault-dialect-test\n\
-         key: { inline: \"dialect-secret\" }\nprofile: basic\n",
+         key: { inline: \"dialect-secret-0123456789abcdef012345678\" }\nprofile: basic\n",
     )
     .unwrap();
     let vault = tmp.path().join("v.jsonl");
@@ -654,7 +655,7 @@ fn chain_runs_policy_lints() {
     let policy = tmp.path().join("risky.yaml");
     std::fs::write(
         &policy,
-        "version: 1\ndataset: risky\nkey: { inline: \"s\" }\non_unlisted: keep\n\
+        "version: 1\ndataset: risky\nkey: { inline: \"s-0123456789abcdef0123456789abcdef\" }\non_unlisted: keep\n\
          fields:\n  - { name: patient_id, class: direct_identifier }\n  \
          - { name: age, class: quasi_identifier }\n",
     )

@@ -43,11 +43,48 @@ pub fn deidentify_file(
 ) -> Result<DicomReport, DicomError> {
     let mut vault = open_vault(policy, options)?;
     let mut uid_cache = HashMap::new();
-    let report = deidentify_with_cache(input, output, policy, vault.as_mut(), &mut uid_cache)?;
-    vault
+    let result = deidentify_with_cache(input, output, policy, vault.as_mut(), &mut uid_cache);
+    // Finish the vault on BOTH paths. `finish()` is what writes every entry, so
+    // returning early on an error left a 0-byte file that `read_vault` later
+    // rejected as "vault file is empty" — losing the mappings for the work that
+    // did succeed.
+    let finished = vault
         .finish()
-        .map_err(|e| DicomError::Transform(format!("cannot finalize vault: {e}")))?;
+        .map_err(|e| DicomError::Transform(format!("cannot finalize vault: {e}")));
+    let mut report = result?;
+    finished?;
+    annotate_vault(&mut report, options);
     Ok(report)
+}
+
+/// Say whether a vault was actually populated.
+///
+/// The tabular path warns when a vault was requested but the job produced nothing
+/// reversible; the DICOM path used to create the file regardless and announce it,
+/// so an operator could believe they held re-identification material when the file
+/// was a bare header.
+fn annotate_vault(report: &mut DicomReport, options: &RunOptions) {
+    let Some(path) = &options.vault_path else {
+        return;
+    };
+    let reversible: u64 = report
+        .tags
+        .iter()
+        .filter(|t| {
+            matches!(
+                t.action.as_str(),
+                "pseudonymized" | "uid-remapped" | "mocked"
+            )
+        })
+        .map(|t| t.occurrences)
+        .sum();
+    if reversible == 0 {
+        report.warnings.push(format!(
+            "no reversible values were produced, so the vault at '{}' contains only a header — \
+             this policy removes or empties everything it touches",
+            path.display()
+        ));
+    }
 }
 
 /// De-identify every DICOM instance under `input` (recursively), writing results
@@ -110,6 +147,8 @@ pub fn deidentify_directory(
         }
     }
 
+    // As above: finish the vault even when individual instances failed, so the
+    // mappings for the successful ones survive.
     vault
         .finish()
         .map_err(|e| DicomError::Transform(format!("cannot finalize vault: {e}")))?;
@@ -420,8 +459,32 @@ fn process_object(
             let (header, value) = taken.into_parts();
             let rebuilt = match value {
                 Value::Sequence(mut sequence) => {
+                    // Recurse first, so nested PHI is handled even when the
+                    // sequence itself is kept.
                     for item in sequence.items_mut() {
                         process_object(item, ctx, depth + 1)?;
+                    }
+                    // Then honour the action on the sequence itself. Previously
+                    // anything other than `remove` was silently discarded here, so
+                    // `empty` on a sequence did nothing and reported "0 modified".
+                    match &action {
+                        Some(TagAction::Empty) => {
+                            sequence.items_mut().clear();
+                            record(ctx, tag, &TagAction::Empty);
+                            ctx.modified += 1;
+                        }
+                        Some(other) if !matches!(other, TagAction::Keep) => {
+                            // Value-level actions have no meaning for a sequence;
+                            // say so rather than appearing to have applied one.
+                            ctx.warnings.push(format!(
+                                "{}: action '{}' cannot apply to a sequence — its items were still \
+                                 de-identified, but the sequence itself was left in place. Use \
+                                 'remove' or 'empty' to act on the sequence",
+                                profile::keyword_of(tag),
+                                other.action_name()
+                            ));
+                        }
+                        _ => {}
                     }
                     Value::Sequence(sequence)
                 }
@@ -479,6 +542,19 @@ fn is_single_value_vr(vr: VR) -> bool {
     matches!(vr, VR::LT | VR::ST | VR::UT | VR::UR)
 }
 
+/// VRs that hold character data, and so can accept a text replacement.
+///
+/// Everything else (`US`, `UL`, `FL`, `OB`, `OW`, …) stores binary values, where
+/// substituting a string reinterprets the bytes rather than replacing the value.
+fn is_text_vr(vr: VR) -> bool {
+    matches!(
+        vr,
+        VR::AE | VR::AS | VR::CS | VR::DA | VR::DS | VR::DT | VR::IS | VR::LO
+            | VR::LT | VR::PN | VR::SH | VR::ST | VR::TM | VR::UC | VR::UI
+            | VR::UR | VR::UT
+    )
+}
+
 /// Apply an action to an attribute, **value by value**.
 ///
 /// DICOM attributes are frequently multi-valued (`ID-1\ID-2\ID-3`). Treating the
@@ -518,6 +594,18 @@ fn apply_action(
         _ => {}
     }
 
+    // Writing a string into a binary VR reinterprets the bytes: `Rows` (US) with
+    // a replaced text value came back as 28526\24948\30062, destroying the image
+    // geometry while the report said "replaced".
+    if !is_text_vr(vr) {
+        ctx.warnings.push(format!(
+            "{keyword}: action '{}' needs a text value, but this attribute's value \
+             representation is {vr:?}. Left unchanged — writing text into a binary attribute \
+             would corrupt it. Use 'remove' or 'empty' instead",
+            action.action_name()
+        ));
+        return Ok(Applied::Unchanged);
+    }
     let Some(values) = primitive_values(value, vr) else {
         return Ok(Applied::Unchanged);
     };
@@ -781,6 +869,12 @@ fn shift_date_text(value: &str, key: &[u8; 32], domain: &str, max_days: i64) -> 
 
     let offset = deterministic_offset(key, domain, max_days);
     let shifted = days_to_civil(civil_to_days(year, month, day) + offset);
+    // A DA value is exactly 8 digits, so the year must stay in 0001..=9999.
+    // Shifting a date near either bound used to produce values like `-0080804`,
+    // which is not a date any reader will accept.
+    if !(1..=9999).contains(&shifted.0) {
+        return None;
+    }
     let mut out = format!("{:04}{:02}{:02}", shifted.0, shifted.1, shifted.2);
     // Preserve any time component of a DT value unchanged: it carries no date
     // information on its own, and dropping it can break readers.

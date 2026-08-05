@@ -15,6 +15,11 @@ dataset: hospital-study-demo
 key:
   env: DEIDENT_KEY
   inline: "demo-secret-do-not-use-in-production"
+  # Demo affordance: permits falling back to the inline value when DEIDENT_KEY is
+  # unset, so the examples run out of the box. Without this the job FAILS closed —
+  # which is what you want in production, because a silently-substituted inline
+  # key is reversible by anyone holding this file and changes every token value.
+  allow_inline_fallback: true
 
 # basic | structural | none
 profile: basic

@@ -74,6 +74,7 @@ impl ChainManifest {
         // boring character set rather than sanitizing at every use site.
         check_name("chain name", &manifest.name)?;
         let mut names = std::collections::HashSet::new();
+        let mut outputs = std::collections::HashMap::new();
         for job in &manifest.jobs {
             check_name("chain job name", &job.name)?;
             anyhow::ensure!(
@@ -81,6 +82,28 @@ impl ChainManifest {
                 "chain job '{}' is listed more than once",
                 job.name
             );
+            // Two jobs writing the same path both reported success while the first
+            // output was silently destroyed.
+            if let Some(first) = outputs.insert(job.output.clone(), job.name.clone()) {
+                anyhow::bail!(
+                    "chain jobs '{first}' and '{}' both write to '{}'; the second would destroy \
+                     the first output",
+                    job.name,
+                    job.output.display()
+                );
+            }
+            // Same for reports and vaults, which are equally destructive.
+            for (label, path) in [("report", &job.report), ("vault", &job.vault)] {
+                if let Some(path) = path
+                    && let Some(first) = outputs.insert(path.clone(), format!("{}:{label}", job.name))
+                {
+                    anyhow::bail!(
+                        "chain job '{}' writes its {label} to '{}', which '{first}' also writes",
+                        job.name,
+                        path.display()
+                    );
+                }
+            }
         }
         Ok(manifest)
     }

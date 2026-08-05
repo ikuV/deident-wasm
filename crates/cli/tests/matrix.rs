@@ -126,7 +126,7 @@ fn run_combo(mode: &str, style: &str, engine: &str, dir: &Path) -> ComboResult {
 version: 1
 name: matrix
 dataset: matrix-scope
-key: {{ inline: "matrix-secret" }}
+key: {{ inline: "matrix-secret-0123456789abcdef0123456789" }}
 jobs:
   - name: patients
     input: {patients}

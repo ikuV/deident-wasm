@@ -274,12 +274,30 @@ pub fn run_job<R: Read, W: Write + Send>(
     let mut reader = format::reader(input_format, input)?;
     let headers = reader.headers()?;
 
+    // A policy field that matches no column is silently inert: if it named a
+    // direct identifier, that identifier is copied through in the clear while the
+    // job still reports success. Name the likely culprit when the only difference
+    // is case or surrounding whitespace.
     for field in &policy.fields {
         if !headers.contains(&field.name) {
-            warnings.push(format!(
-                "policy field '{}' does not exist in the input and was ignored",
-                field.name
-            ));
+            let near = headers
+                .iter()
+                .find(|h| h.trim().eq_ignore_ascii_case(field.name.trim()));
+            match near {
+                Some(actual) => warnings.push(format!(
+                    "policy field '{}' does not match any column, so it was NOT applied; the input                      has '{actual}', which differs only in case or whitespace — column names are                      matched exactly",
+                    field.name
+                )),
+                None => warnings.push(format!(
+                    "policy field '{}' does not exist in the input and was ignored{}",
+                    field.name,
+                    if field.class == FieldClass::DirectIdentifier {
+                        ", so this direct identifier was copied through unchanged"
+                    } else {
+                        ""
+                    }
+                )),
+            }
         }
     }
 

@@ -8,7 +8,7 @@ const POLICY: &str = r#"
 version: 1
 dataset: flow-test
 key:
-  inline: "integration-test-secret"
+  inline: "integration-test-secret-0123456789abcdef"
 on_unlisted: error
 fields:
   - name: id
@@ -133,7 +133,7 @@ const PATTERN_POLICY: &str = r#"
 version: 1
 dataset: pattern-test
 key:
-  inline: "integration-test-secret"
+  inline: "integration-test-secret-0123456789abcdef"
 on_unlisted: error
 fields:
   - name: id
@@ -230,7 +230,7 @@ fn shared_domain_links_tokens_across_differently_named_columns() {
     let policy_a = r#"
 version: 1
 dataset: linked
-key: { inline: "integration-test-secret" }
+key: { inline: "integration-test-secret-0123456789abcdef" }
 fields:
   - name: patient_id
     class: direct_identifier
@@ -239,7 +239,7 @@ fields:
     let policy_b = r#"
 version: 1
 dataset: linked
-key: { inline: "integration-test-secret" }
+key: { inline: "integration-test-secret-0123456789abcdef" }
 fields:
   - name: patient_ref
     class: direct_identifier
@@ -283,7 +283,7 @@ fn presets_expand_and_explicit_rules_override_them() {
     let yaml = r#"
 version: 1
 dataset: preset-test
-key: { inline: "s" }
+key: { inline: "s-0123456789abcdef0123456789abcdef" }
 on_unlisted: keep
 fields: []
 patterns:
