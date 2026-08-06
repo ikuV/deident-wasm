@@ -644,14 +644,48 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
     // Column tokens replaced a whole cell, but pattern tokens and mocks were
     // substituted *inside* a value (an IBAN within a free-text note), so they
     // have to be reversed as substrings.
+    // A replacement value must identify exactly one original. Tokens are 128-bit
+    // and do not collide, but MOCKS are format-preserving, so their value space is
+    // bounded by the shape they imitate and two originals can land on the same
+    // mock. Reversing such a value would hand back the wrong person's data while
+    // looking like an ordinary success, so ambiguous values are refused instead.
+    let ambiguous = ambiguous_replacements(&entries);
+    // One ambiguous value corresponds to two or more vault entries; report both
+    // figures so "N mappings used" stays arithmetically honest.
+    let skipped_entries = entries
+        .iter()
+        .filter(|e| ambiguous.contains(&(e.field.as_str(), e.token.as_str())))
+        .count();
     let mut whole_cell: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     let mut embedded: Vec<(&str, &str)> = Vec::new();
     for entry in &entries {
+        if ambiguous.contains(&(entry.field.as_str(), entry.token.as_str())) {
+            continue;
+        }
         if entry.field.starts_with("pattern:") {
             embedded.push((entry.token.as_str(), entry.original.as_str()));
         } else {
             whole_cell.insert(entry.token.as_str(), entry.original.as_str());
         }
+    }
+    if !ambiguous.is_empty() {
+        eprintln!(
+            "error: {} replacement value(s) in this vault map to more than one original \
+             ({skipped_entries} vault entries) and cannot be reversed unambiguously. They are \
+             left as they are in the output rather than restoring a value that may belong to \
+             someone else.",
+            ambiguous.len()
+        );
+        for (field, token) in ambiguous.iter().take(5) {
+            eprintln!("  ambiguous in '{field}': {token}");
+        }
+        if ambiguous.len() > 5 {
+            eprintln!("  ... and {} more", ambiguous.len() - 5);
+        }
+        eprintln!(
+            "  cause: format-preserving mocks collide once a column holds enough distinct \
+             values. Re-run the original job with action: token to keep it reversible."
+        );
     }
     // Longest first, so a short replacement cannot clobber part of a longer
     // token that contains it.
@@ -705,11 +739,44 @@ fn run_reverse(args: &ReverseArgs) -> anyhow::Result<ExitCode> {
 
     println!(
         "Reversed {restored} value(s) across {rows} row(s) using {} mapping(s) -> {}",
-        entries.len(),
+        entries.len() - skipped_entries,
         args.out.display()
     );
     println!("  note: the output contains original personal data again");
+    if !ambiguous.is_empty() {
+        println!(
+            "  incomplete: {skipped_entries} mapping(s) covering {} ambiguous value(s) were \
+             skipped (see above)",
+            ambiguous.len()
+        );
+        // A partial re-identification must not look like a clean one to a script.
+        return Ok(ExitCode::FAILURE);
+    }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Replacement values that map to more than one original within the same domain.
+///
+/// Keyed by `(field, token)` because the same mock in two different domains is two
+/// unrelated mappings; only a clash *within* a domain is ambiguous.
+fn ambiguous_replacements(
+    entries: &[deident_core::vault::MappingEntry],
+) -> std::collections::BTreeSet<(&str, &str)> {
+    let mut seen: std::collections::HashMap<(&str, &str), &str> = std::collections::HashMap::new();
+    let mut ambiguous = std::collections::BTreeSet::new();
+    for entry in entries {
+        let key = (entry.field.as_str(), entry.token.as_str());
+        match seen.get(&key) {
+            Some(first) if *first != entry.original.as_str() => {
+                ambiguous.insert(key);
+            }
+            Some(_) => {}
+            None => {
+                seen.insert(key, entry.original.as_str());
+            }
+        }
+    }
+    ambiguous
 }
 
 // --- DICOM ---------------------------------------------------------------

@@ -37,6 +37,17 @@ struct Patterns {
     /// Surfaced as a warning: silently skipping a card-shaped value would leave
     /// the operator unaware that something looked like an identifier.
     rejected: Vec<u64>,
+    /// Mock value -> the first original that produced it, per rule.
+    ///
+    /// Mocks are format-preserving, so their output space is bounded by the shape
+    /// they imitate — a 10-digit phone number has 10^10 possible mocks, which by
+    /// the birthday bound starts colliding around 10^5 distinct values. A
+    /// collision makes two different people share one mock, and makes reversal
+    /// ambiguous. Only mock rules are tracked; tokens are 128-bit and do not
+    /// collide in practice.
+    mock_origins: Vec<std::collections::HashMap<String, String>>,
+    /// Distinct originals that had to share an already-issued mock, per rule.
+    mock_collisions: Vec<u64>,
 }
 
 impl Patterns {
@@ -76,7 +87,24 @@ impl Patterns {
             .collect();
         let counts = vec![vec![0u64; headers.len()]; rules.len()];
         let rejected = vec![0u64; rules.len()];
-        Ok(Self { rules, per_column, counts, rejected })
+        let mock_origins = rules
+            .iter()
+            .map(|(rule, _)| {
+                // Only mock rules need the index; keep it empty for the rest so a
+                // token-only policy pays nothing.
+                let _ = rule;
+                std::collections::HashMap::new()
+            })
+            .collect();
+        let mock_collisions = vec![0u64; rules.len()];
+        Ok(Self {
+            rules,
+            per_column,
+            counts,
+            rejected,
+            mock_origins,
+            mock_collisions,
+        })
     }
 
     /// Whether any rule derives values from the key (token or mock).
@@ -141,6 +169,10 @@ impl Patterns {
                     let shape = rule.mock_shape();
                     let mut mappings: Vec<MappingEntry> = Vec::new();
                     let mut rejected = 0u64;
+                    let mut collisions = 0u64;
+                    // Taken out of `self` for the closure's exclusive use, put back
+                    // below — `replace_all`'s callback cannot borrow `self` again.
+                    let mut mock_origins = std::mem::take(&mut self.mock_origins[i]);
                     let replaced = regex.replace_all(&current, |caps: &regex::Captures| {
                         let matched = caps.get(0).expect("group 0 always exists").as_str();
                         if !validator.accepts(matched) {
@@ -148,12 +180,27 @@ impl Patterns {
                             return matched.to_string();
                         }
                         let replacement = match rule.action {
-                            PatternAction::Mock => crate::mock::generate(
-                                shape.expect("validated: mock rules have a shape"),
-                                key,
-                                &domain,
-                                matched,
-                            ),
+                            PatternAction::Mock => {
+                                let mock = crate::mock::generate(
+                                    shape.expect("validated: mock rules have a shape"),
+                                    key,
+                                    &domain,
+                                    matched,
+                                );
+                                // Two originals landing on one mock is silent data
+                                // corruption: the output merges two identities and
+                                // reversal can only guess. Count it here so the
+                                // report can say so at transformation time, rather
+                                // than leaving it to be discovered at reverse time.
+                                match mock_origins.get(&mock) {
+                                    Some(first) if first != matched => collisions += 1,
+                                    Some(_) => {}
+                                    None => {
+                                        mock_origins.insert(mock.clone(), matched.to_string());
+                                    }
+                                }
+                                mock
+                            }
                             _ => key::token(key, &domain, matched, rule.prefix.as_deref()),
                         };
                         mappings.push(MappingEntry {
@@ -163,6 +210,8 @@ impl Patterns {
                         });
                         replacement
                     });
+                    self.mock_origins[i] = mock_origins;
+                    self.mock_collisions[i] += collisions;
                     self.rejected[i] += rejected;
                     if !mappings.is_empty() {
                         current = replaced.into_owned();
@@ -198,6 +247,20 @@ impl Patterns {
                     });
                     rule_total += matches;
                 }
+            }
+            if self.mock_collisions[i] > 0 {
+                let distinct = self.mock_origins[i].len() as u64;
+                warnings.push(format!(
+                    "pattern '{}' produced COLLIDING mock values: {} value(s) were assigned a \
+                     mock already issued to a different original ({distinct} distinct mocks in \
+                     use). Mocks preserve the format they imitate, so their value space is \
+                     bounded and collides once a column holds enough distinct values. Two \
+                     identities now share one mock in the output, and 'deident reverse' will \
+                     refuse those values rather than guess. Use action: token (128-bit, does not \
+                     collide) where the mapping must stay reversible",
+                    rule.name,
+                    self.mock_collisions[i]
+                ));
             }
             if self.rejected[i] > 0 {
                 warnings.push(format!(

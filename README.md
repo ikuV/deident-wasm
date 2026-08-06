@@ -455,6 +455,25 @@ custom `regex:` rule. A mock is a **pseudonym with a prettier shape**, not
 anonymization: it is recorded in the mapping vault exactly like a token, and
 anyone with the key can recompute it.
 
+> ⚠️ **Mocks collide, and sooner than you would guess.** Preserving a format
+> bounds the value space: a 9-digit phone number has only 10^9 possible mocks, so
+> by the birthday bound two different numbers start sharing a mock at around
+> **31,000 distinct values** — a small dataset. Email mocks (26^10) and IBANs are
+> far roomier; phone and short card shapes are the risky ones.
+>
+> When it happens, two identities share one value in the output and the mapping
+> stops being invertible. The tool does not paper over it:
+>
+> - the risk report names the pattern and counts the colliding values, at
+>   transformation time rather than months later;
+> - `deident reverse` **refuses** an ambiguous value, leaving it in place and
+>   exiting non-zero, rather than restoring a value that may belong to someone
+>   else.
+>
+> Use `action: token` (128-bit, no practical collisions) wherever the mapping has
+> to stay reversible. Mocks are for feeding format-validating systems, not for
+> round-tripping identities.
+
 Dropped and tokenized columns are never scanned (nothing left to find).
 
 ### Built-in detectors

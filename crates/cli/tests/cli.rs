@@ -682,3 +682,77 @@ fn chain_runs_policy_lints() {
         .failure()
         .stderr(predicate::str::contains("--deny-lints"));
 }
+
+/// A colliding mock must never be reversed to a guess.
+///
+/// `555-021-678` and `555-031-074` are two originals found by exhaustive search
+/// to produce the same phone mock under this secret — they collided after ~31k
+/// values, which is what the birthday bound predicts for a 9-digit space. Before
+/// this was handled, `reverse` restored whichever entry happened to win the map
+/// insert, silently returning one person's phone number for both rows.
+#[test]
+fn reverse_refuses_a_colliding_mock_instead_of_guessing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let policy = tmp.path().join("p.yaml");
+    std::fs::write(
+        &policy,
+        r#"
+version: 1
+dataset: ds
+on_unlisted: keep
+key: { inline: "collision-probe-secret-0123456789abcdef" }
+fields:
+  - name: id
+    class: direct_identifier
+    pseudonymize: { prefix: "id_" }
+patterns:
+  - name: phone
+    regex: '555-[0-9]{3}-[0-9]{3}'
+    fields: [phone]
+    action: mock
+    mock: phone
+    validate: none
+"#,
+    )
+    .unwrap();
+    let input = tmp.path().join("in.csv");
+    std::fs::write(&input, "id,phone\nAlice,555-021-678\nBob,555-031-074\n").unwrap();
+    let out = tmp.path().join("out.csv");
+    let vault = tmp.path().join("v.jsonl");
+
+    deident()
+        .arg("pseudonymize")
+        .arg(&input)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(&out)
+        .arg("--vault")
+        .arg(&vault)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("COLLIDING mock values"));
+
+    let restored = tmp.path().join("back.csv");
+    deident()
+        .arg("reverse")
+        .arg(&out)
+        .arg("--vault")
+        .arg(&vault)
+        .arg("--policy")
+        .arg(&policy)
+        .arg("--out")
+        .arg(&restored)
+        .assert()
+        // A partial re-identification must not look like a clean one to a script.
+        .failure()
+        .stderr(predicate::str::contains("cannot be reversed unambiguously"));
+
+    let restored = std::fs::read_to_string(&restored).unwrap();
+    assert!(
+        !restored.contains("555-021-678") && !restored.contains("555-031-074"),
+        "an ambiguous mock must be left alone, not resolved to a guess:\n{restored}"
+    );
+    // The unambiguous column tokens are still reversed.
+    assert!(restored.contains("Alice") && restored.contains("Bob"), "{restored}");
+}

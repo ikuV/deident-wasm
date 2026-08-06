@@ -48,6 +48,17 @@ more than the crate version for anyone holding existing outputs.
 
 Acting on [SECURITY_AUDIT.md](SECURITY_AUDIT.md):
 
+- **H3 — mock collisions no longer corrupt re-identification.** Format-preserving
+  mocks have a value space bounded by the shape they imitate: a 9-digit phone
+  number allows 10^9 mocks, so by the birthday bound two originals start sharing
+  one at ~31,000 distinct values (confirmed by exhaustive search — the two
+  colliding values are pinned in `crates/core/tests/mock_collisions.rs`). When
+  that happened, `reverse` silently returned whichever mapping won a hash-map
+  insert, handing back **the wrong person's data** while reporting success. Now
+  the risk report names the pattern and counts collisions at transformation time,
+  and `reverse` refuses an ambiguous value — leaving it in place and exiting
+  non-zero — instead of guessing.
+
 - **Key resolution is now fail-closed.** A policy declaring both `key.env` and
   `key.inline` used to fall back to the inline value when the variable was unset.
   A forgotten `export` therefore produced output that looked correctly
