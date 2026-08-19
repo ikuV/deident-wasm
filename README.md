@@ -801,11 +801,18 @@ Lints also run automatically before every job (warnings to stderr). Use
 fires — useful in CI.
 
 Two levels: **warning** (likely a privacy problem) and **advice** (legitimate
-in many setups). Current rules include: `inline-key`, `missing-key-source`,
+in many setups). Current rules: `inline-key`, `missing-key-source`,
 `unlisted-columns-kept`, `unlisted-columns-removed`, `qi-without-strategy`,
 `direct-identifier-partially-kept`, `ineffective-bucket`,
 `free-text-without-patterns`, `no-direct-identifiers`, `no-quasi-identifiers`,
+`duplicate-builtin-detector`, `heuristic-pattern-modifies-data`,
 `detect-only-pattern`, `reversible-pattern-in-anonymize`.
+
+`free-text-without-patterns` recognizes free-text columns by name, in English
+and German (`notes`, `comment`, `summary`, `bemerkung`, `notiz`,
+`beschreibung`, …). Name matching is a heuristic in both languages: a column
+called `col_7` that holds prose is missed, so pattern rules are still worth
+adding deliberately rather than waiting for the lint to ask.
 
 Lints are heuristics, not a compliance check — a clean lint run does not mean a
 policy is adequate for your data.

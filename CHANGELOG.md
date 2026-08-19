@@ -86,6 +86,18 @@ Acting on [SECURITY_AUDIT.md](SECURITY_AUDIT.md):
 
 ### Fixed
 
+- `free-text-without-patterns` was **English-only** while the policies this tool
+  ships with are German-facing, so a `Bemerkung` or `Notiz` column full of prose
+  passed the lint in silence. The hint list now covers `kommentar`, `notiz`,
+  `bemerkung`, `anmerkung` and `beschreibung` alongside `summary`, `details` and
+  `subject` (`freitext` already matched via `text`). `body` is deliberately left
+  out: as a substring it fires on `antibody_titer`, and a lint with false
+  positives is one people learn to ignore.
+- The `duplicate-builtin-detector` message reached the terminal with a long run
+  of spaces mid-sentence — a missing line continuation in the format string.
+- The README's lint list omitted `duplicate-builtin-detector` and
+  `heuristic-pattern-modifies-data`, both of which have shipped for a while.
+
 Two bug-hunting passes over the workspace produced 24 verified findings. All of
 them are fixed.
 

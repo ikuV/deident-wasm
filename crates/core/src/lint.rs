@@ -56,8 +56,32 @@ impl Lint {
 
 /// Column-name fragments that suggest free text, which can carry identifiers
 /// that column-level rules never see.
-const FREE_TEXT_HINTS: [&str; 8] = [
-    "note", "comment", "description", "text", "remark", "memo", "free", "message",
+///
+/// Matched as substrings against the lowercased column name, so German column
+/// names are listed alongside the English ones — the examples this tool ships
+/// with are German-facing, and `bemerkung` is no less free text than `remark`.
+/// `freitext` needs no entry of its own: it already contains `text`.
+///
+/// Deliberately absent: `body`. As a substring it fires on medical columns like
+/// `antibody_titer`, and a lint with false positives is a lint people learn to
+/// ignore.
+const FREE_TEXT_HINTS: [&str; 16] = [
+    "note",
+    "comment",
+    "description",
+    "text",
+    "remark",
+    "memo",
+    "free",
+    "message",
+    "summary",
+    "details",
+    "subject",
+    "kommentar",
+    "notiz",
+    "bemerkung",
+    "anmerkung",
+    "beschreibung",
 ];
 
 /// Lint a policy. `mode` restricts the rules to those relevant for one mode;
@@ -246,7 +270,9 @@ pub fn lint(policy: &Policy, mode: Option<Mode>) -> Vec<Lint> {
                 LintLevel::Warning,
                 Some(&pattern.name),
                 format!(
-                    "rules '{first}' and '{}' both use the '{}' detector. Rules run in order over                      the same value, so the first one's replacement hides the matches the second                      would have made — keep one rule per detector",
+                    "rules '{first}' and '{}' both use the '{}' detector. Rules run in order over \
+                     the same value, so the first one's replacement hides the matches the second \
+                     would have made — keep one rule per detector",
                     pattern.name,
                     builtin.name()
                 ),
@@ -359,6 +385,31 @@ fields:
         );
         assert!(found.contains(&"free-text-without-patterns".to_string()));
         assert!(found.contains(&"ineffective-bucket".to_string()));
+    }
+
+    #[test]
+    fn free_text_hints_cover_german_columns_but_not_antibody() {
+        let found = rules(
+            r#"
+version: 1
+dataset: d
+key: { env: K }
+fields:
+  - { name: id, class: direct_identifier }
+  - { name: Bemerkung, class: utility }
+  - { name: antibody_titer, class: sensitive }
+"#,
+            Some(Mode::Anonymize),
+        );
+        // One hit only: `Bemerkung` (case-insensitive), not `antibody_titer`.
+        assert_eq!(
+            found
+                .iter()
+                .filter(|r| *r == "free-text-without-patterns")
+                .count(),
+            1,
+            "expected exactly one free-text lint, got: {found:?}"
+        );
     }
 
     #[test]
