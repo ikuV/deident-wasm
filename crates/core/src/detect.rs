@@ -78,6 +78,9 @@ pub enum Validator {
     UrlSyntax,
     /// E.164 limits: 7–15 digits and no leading zero in the country code.
     PhoneE164,
+    /// Six hex octets, rejecting the all-identical placeholders (`00:00:…`,
+    /// `ff:ff:…`) that are wildcards rather than device identifiers.
+    MacAddress,
 }
 
 impl Validator {
@@ -94,6 +97,7 @@ impl Validator {
             Validator::EmailSyntax => email_syntax_valid(matched),
             Validator::UrlSyntax => url_syntax_valid(matched),
             Validator::PhoneE164 => phone_e164_valid(matched),
+            Validator::MacAddress => mac_address_valid(matched),
         }
     }
 
@@ -110,8 +114,26 @@ impl Validator {
             Validator::EmailSyntax => "email syntax",
             Validator::UrlSyntax => "URL syntax",
             Validator::PhoneE164 => "E.164 limits",
+            Validator::MacAddress => "MAC octet parse",
         }
     }
+}
+
+/// Whether a matched string is a plausible hardware address.
+///
+/// Structural only, because a MAC carries no check digit: exactly twelve hex
+/// digits, and not a run of one repeated digit. That last rule removes the
+/// wildcards that appear in ARP tables and config templates —
+/// `00:00:00:00:00:00` (unspecified) and `ff:ff:ff:ff:ff:ff` (broadcast) are
+/// not anybody's device. Nothing else is rejected: an unassigned OUI is still a
+/// real address in a real dataset, so refusing it would be a false negative.
+fn mac_address_valid(matched: &str) -> bool {
+    let hex: Vec<u8> = matched
+        .bytes()
+        .filter(|b| b.is_ascii_hexdigit())
+        .map(|b| b.to_ascii_lowercase())
+        .collect();
+    hex.len() == 12 && !hex.iter().all(|d| *d == hex[0])
 }
 
 /// Luhn, plus the length and issuer prefix a payment card actually has.
@@ -302,6 +324,7 @@ pub enum BuiltinPattern {
     Iban,
     CreditCard,
     IpAddress,
+    MacAddress,
     Url,
     ApiKey,
     Ifsc,
@@ -333,12 +356,16 @@ pub enum BuiltinPattern {
 /// - `organization` and `medical_term` precede `person_name`, whose
 ///   capitalised-bigram alternative otherwise claimed `Apollo Hospital` and
 ///   `Cardiac Arrest`.
+/// - `ip_address` precedes `mac_address`: both are colon-separated hex, and the
+///   six-group MAC pattern would otherwise claim the first six groups of an
+///   eight-group IPv6 address and leave the last two in the output.
 pub const ALL: &[BuiltinPattern] = &[
     // Precise: distinctive syntax, mostly checksum-verified.
     BuiltinPattern::Email,
     BuiltinPattern::Iban,
     BuiltinPattern::CreditCard,
     BuiltinPattern::IpAddress,
+    BuiltinPattern::MacAddress,
     BuiltinPattern::Url,
     BuiltinPattern::ApiKey,
     BuiltinPattern::Ifsc,
@@ -363,6 +390,7 @@ impl BuiltinPattern {
             BuiltinPattern::Iban => "iban",
             BuiltinPattern::CreditCard => "credit_card",
             BuiltinPattern::IpAddress => "ip_address",
+            BuiltinPattern::MacAddress => "mac_address",
             BuiltinPattern::Url => "url",
             BuiltinPattern::ApiKey => "api_key",
             BuiltinPattern::Ifsc => "ifsc",
@@ -384,6 +412,7 @@ impl BuiltinPattern {
             | BuiltinPattern::Iban
             | BuiltinPattern::CreditCard
             | BuiltinPattern::IpAddress
+            | BuiltinPattern::MacAddress
             | BuiltinPattern::Url
             | BuiltinPattern::ApiKey
             | BuiltinPattern::Ifsc => Precision::Precise,
@@ -406,6 +435,7 @@ impl BuiltinPattern {
             BuiltinPattern::Iban => Validator::IbanMod97,
             BuiltinPattern::Ssn => Validator::SsnUs,
             BuiltinPattern::IpAddress => Validator::IpAddress,
+            BuiltinPattern::MacAddress => Validator::MacAddress,
             BuiltinPattern::DateOfBirth => Validator::CalendarDate,
             BuiltinPattern::Email => Validator::EmailSyntax,
             BuiltinPattern::Url => Validator::UrlSyntax,
@@ -432,6 +462,9 @@ impl BuiltinPattern {
             BuiltinPattern::Iban => "IBAN (mod-97 verified, accepts grouped and lowercase forms)",
             BuiltinPattern::CreditCard => "payment card number (Luhn verified)",
             BuiltinPattern::IpAddress => "IPv4 or IPv6 address",
+            BuiltinPattern::MacAddress => {
+                "MAC/hardware address in colon, dash or Cisco dotted form"
+            }
             BuiltinPattern::Url => "URL",
             BuiltinPattern::ApiKey => "API key or access token of a known vendor shape",
             BuiltinPattern::Ifsc => "Indian IFSC code, optionally with an account number",
@@ -506,6 +539,17 @@ impl BuiltinPattern {
                     r"|(?:[0-9A-Fa-f]{1,4}:){1,7}(?::[0-9A-Fa-f]{1,4}){1,7}",
                     r"|(?:[0-9A-Fa-f]{1,4}:){1,7}:",
                     r"|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?",
+                )
+            }
+            // One alternative per separator style rather than a single
+            // `[:.-]` class, so a mixed-punctuation string (`00:1a-2b:3c…`)
+            // matches nothing instead of being reported as a hardware address.
+            // The Cisco dotted form is three groups of four, not six of two.
+            BuiltinPattern::MacAddress => {
+                concat!(
+                    r"(?i)\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b",
+                    r"|\b[0-9a-f]{2}(?:-[0-9a-f]{2}){5}\b",
+                    r"|\b[0-9a-f]{4}(?:\.[0-9a-f]{4}){2}\b",
                 )
             }
             BuiltinPattern::Url => {
@@ -584,6 +628,7 @@ impl BuiltinPattern {
             BuiltinPattern::Iban => "DE89 3704 0044 0532 0130 00",
             BuiltinPattern::CreditCard => "4532-1234-5678-9014",
             BuiltinPattern::IpAddress => "192.168.1.1",
+            BuiltinPattern::MacAddress => "00:1A:2B:3C:4D:5E",
             BuiltinPattern::Url => "https://internal.company.com",
             BuiltinPattern::ApiKey => "AKIAIOSFODNN7EXAMPLE",
             BuiltinPattern::Ifsc => "HDFC0001234 000123456789",
@@ -637,7 +682,7 @@ mod tests {
         for builtin in ALL {
             assert!(names.insert(builtin.name()), "duplicate name {}", builtin.name());
         }
-        assert_eq!(names.len(), 16, "all sixteen detectors present");
+        assert_eq!(names.len(), 17, "all seventeen detectors present");
     }
 
     fn matches(builtin: BuiltinPattern, text: &str) -> Vec<String> {
@@ -754,6 +799,49 @@ mod tests {
         assert!(
             matches(BuiltinPattern::IpAddress, "meeting at 12:30 only").is_empty(),
             "a clock time is not an address"
+        );
+    }
+
+    #[test]
+    fn mac_addresses_cover_the_three_written_conventions() {
+        for (text, expected) in [
+            ("device 00:1A:2B:3C:4D:5E connected", "00:1A:2B:3C:4D:5E"),
+            ("device 00-1a-2b-3c-4d-5e connected", "00-1a-2b-3c-4d-5e"),
+            ("device 001a.2b3c.4d5e connected", "001a.2b3c.4d5e"),
+        ] {
+            assert_eq!(matches(BuiltinPattern::MacAddress, text), vec![expected.to_string()]);
+        }
+        // Wildcards, not devices.
+        for placeholder in ["00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"] {
+            assert!(
+                matches(BuiltinPattern::MacAddress, placeholder).is_empty(),
+                "accepted placeholder {placeholder}"
+            );
+        }
+        // Wrong octet count, mixed separators and clock times are not addresses.
+        for innocent in ["00:1A:2B:3C:4D", "00:1a-2b:3c:4d:5e", "meeting at 12:30 only"] {
+            assert!(
+                matches(BuiltinPattern::MacAddress, innocent).is_empty(),
+                "must not match {innocent:?}"
+            );
+        }
+    }
+
+    /// Both detectors read colon-separated hex, so the catalog order is what
+    /// keeps a MAC pattern from claiming six of an IPv6 address's eight groups.
+    #[test]
+    fn mac_and_ip_detectors_do_not_steal_each_other_s_matches() {
+        assert!(
+            matches(BuiltinPattern::IpAddress, "00:1A:2B:3C:4D:5E").is_empty(),
+            "the IP detector must not claim a MAC address"
+        );
+        let ipv6 = "2001:0db8:0000:0000:0000:ff00:0042:8329";
+        assert_eq!(matches(BuiltinPattern::IpAddress, ipv6), vec![ipv6.to_string()]);
+        let position = |b: BuiltinPattern| ALL.iter().position(|x| *x == b).unwrap();
+        assert!(
+            position(BuiltinPattern::IpAddress) < position(BuiltinPattern::MacAddress),
+            "ip_address must run first: the MAC pattern matches this IPv6 address's \
+             first six groups, so running it first would leave a fragment behind"
         );
     }
 
@@ -953,6 +1041,20 @@ mod validator_tests {
         assert!(!v.accepts("12345"), "too few digits");
     }
 
+    #[test]
+    fn mac_validation_rejects_only_wildcards_and_wrong_lengths() {
+        let v = Validator::MacAddress;
+        for good in ["00:1A:2B:3C:4D:5E", "00-1a-2b-3c-4d-5e", "001a.2b3c.4d5e"] {
+            assert!(v.accepts(good), "rejected real address {good}");
+        }
+        for bad in ["00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF", "00:1A:2B:3C:4D"] {
+            assert!(!v.accepts(bad), "accepted {bad}");
+        }
+        // An unassigned OUI is still a real address in a real dataset; rejecting
+        // it would be a false negative, which is the worse failure.
+        assert!(v.accepts("02:00:00:00:00:01"));
+    }
+
     /// The catalog must stay honest: a detector claims verification only when a
     /// validator actually runs for it.
     #[test]
@@ -969,12 +1071,13 @@ mod validator_tests {
                 "iban",
                 "credit_card",
                 "ip_address",
+                "mac_address",
                 "url",
                 "ssn",
                 "date_of_birth",
                 "phone",
             ],
-            "eight of sixteen detectors are validated; the rest have no checksum \
+            "nine of seventeen detectors are validated; the rest have no checksum \
              or structural rule and must not claim one"
         );
     }

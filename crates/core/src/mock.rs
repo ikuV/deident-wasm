@@ -23,6 +23,7 @@ pub enum MockShape {
     Email,
     Phone,
     CreditCard,
+    MacAddress,
 }
 
 impl MockShape {
@@ -37,6 +38,7 @@ impl MockShape {
             BuiltinPattern::Email => MockShape::Email,
             BuiltinPattern::Phone => MockShape::Phone,
             BuiltinPattern::CreditCard => MockShape::CreditCard,
+            BuiltinPattern::MacAddress => MockShape::MacAddress,
             _ => return None,
         })
     }
@@ -68,7 +70,56 @@ pub fn generate(shape: MockShape, key: &[u8; 32], domain: &str, original: &str) 
         MockShape::Email => email(&material, original),
         MockShape::Phone => phone(&material, original),
         MockShape::CreditCard => credit_card(&material, original),
+        MockShape::MacAddress => mac_address(&material, original),
     }
+}
+
+/// MAC address keeping the original's separator style and letter case.
+///
+/// The first octet always has the locally-administered bit set and the
+/// multicast bit cleared (`x2`, `x6`, `xa`, `xe`), which is the IEEE-reserved
+/// space for addresses nobody assigns. A mock therefore can never collide with
+/// a real vendor OUI — the same reasoning as using `example.com` for email
+/// mocks — while still parsing as a unicast address for anything that validates
+/// its input.
+fn mac_address(material: &[u8], original: &str) -> String {
+    let mut octets = [0u8; 6];
+    for (i, octet) in octets.iter_mut().enumerate() {
+        *octet = material[i % material.len()].wrapping_add((i / material.len()) as u8);
+    }
+    octets[0] = (octets[0] & 0xfe) | 0x02;
+
+    let uppercase = original
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .all(|c| c.is_ascii_uppercase());
+    let hex = |byte: u8| {
+        if uppercase {
+            format!("{byte:02X}")
+        } else {
+            format!("{byte:02x}")
+        }
+    };
+
+    // Cisco dotted form is three groups of two octets; otherwise keep the
+    // original's separator, defaulting to the colon convention.
+    if original.contains('.') {
+        return format!(
+            "{}{}.{}{}.{}{}",
+            hex(octets[0]),
+            hex(octets[1]),
+            hex(octets[2]),
+            hex(octets[3]),
+            hex(octets[4]),
+            hex(octets[5]),
+        );
+    }
+    let separator = if original.contains('-') { "-" } else { ":" };
+    octets
+        .iter()
+        .map(|b| hex(*b))
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 /// IBAN with the original's country code and length, and recomputed mod-97
@@ -300,6 +351,34 @@ mod tests {
         let mock = generate(MockShape::Email, &key(), "email", "ada@real-company.example");
         assert!(mock.ends_with("@example.com"), "{mock}");
         assert!(!mock.starts_with("ada@"));
+    }
+
+    #[test]
+    fn mac_mock_keeps_the_written_form_and_is_locally_administered() {
+        for original in ["00:1A:2B:3C:4D:5E", "00-1a-2b-3c-4d-5e", "001a.2b3c.4d5e"] {
+            let mock = generate(MockShape::MacAddress, &key(), "mac_address", original);
+            assert_ne!(mock, original, "a mock must differ from its input");
+            assert_eq!(
+                mock.chars().map(|c| if c.is_ascii_hexdigit() { 'x' } else { c }).collect::<String>(),
+                original.chars().map(|c| if c.is_ascii_hexdigit() { 'x' } else { c }).collect::<String>(),
+                "separator layout must survive for {original}"
+            );
+            assert!(
+                crate::detect::Validator::MacAddress.accepts(&mock),
+                "mock {mock} must pass the detector's own validator"
+            );
+            // Locally administered and unicast: the mock can never collide with
+            // a real vendor OUI.
+            let first = u8::from_str_radix(&mock[0..2], 16).unwrap();
+            assert_eq!(first & 0x03, 0x02, "{mock} is not locally-administered unicast");
+        }
+        // Deterministic, and case follows the input.
+        let upper = generate(MockShape::MacAddress, &key(), "mac_address", "00:1A:2B:3C:4D:5E");
+        assert_eq!(
+            upper,
+            generate(MockShape::MacAddress, &key(), "mac_address", "00:1A:2B:3C:4D:5E")
+        );
+        assert!(upper.chars().filter(|c| c.is_ascii_alphabetic()).all(|c| c.is_ascii_uppercase()));
     }
 
     #[test]

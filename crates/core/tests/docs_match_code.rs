@@ -70,11 +70,11 @@ fn the_readme_states_the_correct_validated_count() {
         .iter()
         .filter(|b| b.validator() != Validator::None)
         .count();
-    assert_eq!(validated, 8, "if this changed, update the README prose too");
-    assert_eq!(ALL.len(), 16, "if this changed, update the README prose too");
+    assert_eq!(validated, 9, "if this changed, update the README prose too");
+    assert_eq!(ALL.len(), 17, "if this changed, update the README prose too");
     for claim in [
-        "**Eight of the sixteen are validated**",
-        "16 built-in detectors",
+        "**Nine of the seventeen are validated**",
+        "17 built-in detectors",
     ] {
         assert!(
             readme.contains(claim),

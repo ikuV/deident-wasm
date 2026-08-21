@@ -10,6 +10,31 @@ more than the crate version for anyone holding existing outputs.
 
 ### Added
 
+- **`mac_address` detector**, the seventeenth built-in and the ninth validated
+  one. Hardware addresses are stable device identifiers — a MAC in a log line or
+  a medical-device export follows one machine, and one user, across every other
+  pseudonym in the dataset — and until now nothing found them.
+
+  Matches the three written conventions (`00:1A:2B:3C:4D:5E`,
+  `00-1a-2b-3c-4d-5e`, Cisco `001a.2b3c.4d5e`), each as its own alternative so a
+  mixed-punctuation string matches nothing rather than being reported as an
+  address. Validation is structural, since a MAC carries no check digit: twelve
+  hex digits, rejecting the all-identical wildcards `00:00:00:00:00:00` and
+  `ff:ff:ff:ff:ff:ff` that appear in ARP tables and config templates. An
+  unassigned OUI is still accepted — refusing it would be a false negative,
+  which is the worse failure.
+
+  It runs **after** `ip_address` in the catalog, and a test enforces the order:
+  both read colon-separated hex, and the six-group MAC pattern otherwise claimed
+  the first six groups of an eight-group IPv6 address, leaving the last two in
+  output the report called redacted.
+
+  `action: mock` is supported. The mock keeps the original's separator style and
+  letter case, and always sets the locally-administered bit while clearing the
+  multicast bit, so it parses as a unicast address for anything that validates
+  its input but can never collide with a real vendor OUI — the same reasoning as
+  mocking email into the `example.com` documentation domain.
+
 - **Parallel execution.** Two independent axes, each giving every job its own
   sandbox (fresh `Store`, WASI context and limits); the guest module is compiled
   once and shared, nothing else is.

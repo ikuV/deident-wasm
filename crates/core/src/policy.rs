@@ -321,6 +321,7 @@ pub enum MockShapeCfg {
     Email,
     Phone,
     CreditCard,
+    MacAddress,
 }
 
 impl From<MockShapeCfg> for crate::mock::MockShape {
@@ -330,6 +331,7 @@ impl From<MockShapeCfg> for crate::mock::MockShape {
             MockShapeCfg::Email => crate::mock::MockShape::Email,
             MockShapeCfg::Phone => crate::mock::MockShape::Phone,
             MockShapeCfg::CreditCard => crate::mock::MockShape::CreditCard,
+            MockShapeCfg::MacAddress => crate::mock::MockShape::MacAddress,
         }
     }
 }

@@ -39,12 +39,12 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
   remove, redact, bucket, truncate dates, keep a prefix. See
   [Policy reference](#policy-reference).
 - **Content patterns** — find identifiers *inside* values (an IBAN in a
-  free-text note) with **16 built-in detectors** (email, IBAN, card, SSN, phone,
-  IP, URL, API key, passport, plate, IFSC, date of birth, plus heuristic name /
-  address / organization / medical-term matchers) or your own regex, then detect,
-  redact, tokenize or replace them with structurally valid fakes. **Eight of the
-  sixteen are validated** by checksum or structural parse (mod-97, Luhn, real
-  calendar dates, IP parsing), so a loose pattern does not cost you false
+  free-text note) with **17 built-in detectors** (email, IBAN, card, SSN, phone,
+  IP, MAC, URL, API key, passport, plate, IFSC, date of birth, plus heuristic
+  name / address / organization / medical-term matchers) or your own regex, then
+  detect, redact, tokenize or replace them with structurally valid fakes. **Nine
+  of the seventeen are validated** by checksum or structural parse (mod-97, Luhn,
+  real calendar dates, IP parsing), so a loose pattern does not cost you false
   positives. See [Built-in detectors](#built-in-detectors).
 - **Chained datasets** — process several files as one export with shared token
   scoping, so foreign keys still join after pseudonymization. See
@@ -449,6 +449,7 @@ same mock, and joins on the mocked value keep working.
 | `credit_card` | Length and separators | Valid Luhn check digit, forced into the `999x` test IIN range so it cannot collide with a real issuer |
 | `phone` | Punctuation and digit count | New digits, leading digit kept non-zero |
 | `email` | Nothing of the original | A random local part at `example.com` (RFC 2606 documentation domain) |
+| `mac_address` | Separator style (`:`, `-`, Cisco dotted) and letter case | New octets with the locally-administered bit set and multicast cleared, so the mock parses as unicast but can never match a real vendor OUI |
 
 The shape comes from `builtin:`, or set `mock:` explicitly when mocking a
 custom `regex:` rule. A mock is a **pseudonym with a prettier shape**, not
@@ -478,12 +479,12 @@ Dropped and tokenized columns are never scanned (nothing left to find).
 
 ### Built-in detectors
 
-Sixteen detectors, grouped by **how much a match can be trusted**. That grouping
-is the important part: it stops a heuristic guess from being mistaken for a
-verified identifier.
+Seventeen detectors, grouped by **how much a match can be trusted**. That
+grouping is the important part: it stops a heuristic guess from being mistaken
+for a verified identifier.
 
-**Eight of the sixteen are validated** beyond their pattern — the match must also
-pass a checksum or a structural parse before it counts.
+**Nine of the seventeen are validated** beyond their pattern — the match must
+also pass a checksum or a structural parse before it counts.
 
 | Detector | Example | Class | Validated by |
 |---|---|---|---|
@@ -491,6 +492,7 @@ pass a checksum or a structural parse before it counts.
 | `iban` | `DE89 3704 0044 0532 0130 00` | precise | ✅ mod-97 (ISO 7064) check digits |
 | `credit_card` | `4111 1111 1111 1111` | precise | ✅ Luhn **plus** card length (13–19) and issuer prefix (2–6) |
 | `ip_address` | `192.168.1.1`, `2001:db8::1` | precise | ✅ parsed as a real address (`std::net::IpAddr`) |
+| `mac_address` | `00:1A:2B:3C:4D:5E`, `001a.2b3c.4d5e` | precise | ✅ six hex octets, rejects the `00:…`/`ff:…` wildcards |
 | `url` | `https://internal.company.com` | precise | ✅ known scheme, plausible host, no whitespace |
 | `api_key` | `AKIA…`, `sk-proj-…`, `github_pat_…`, `xoxb-…`, `glpat-…` | precise | — opaque by design |
 | `ifsc` | `HDFC0001234 000123456789` | precise | — no checksum exists |
@@ -563,7 +565,7 @@ their final characters, which is checkable but vendor-specific.
 
 #### Presets
 
-Rather than listing sixteen rules, enable a whole class:
+Rather than listing seventeen rules, enable a whole class:
 
 ```yaml
 presets:
