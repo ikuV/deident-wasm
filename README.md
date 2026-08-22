@@ -120,6 +120,7 @@ deident <COMMAND> [OPTIONS]
 | `anonymize <INPUT>...` | Irreversibly remove/generalize identifiers and produce a risk report |
 | `chain <MANIFEST> --mode <MODE>` | Run several datasets as one chained export ([Chained datasets](#chained-datasets)) |
 | `lint <POLICY>` | Report risky-but-valid policy configurations ([Policy lints](#policy-lints)) |
+| `detectors` | List the built-in entity detectors, their class and validation ([Built-in detectors](#built-in-detectors)) |
 | `vault export <VAULT> --policy <FILE>` | Decrypt a mapping vault to CSV ([Mapping vault](#mapping-vault-and-reversal)) |
 | `reverse <INPUT> --vault <FILE> --policy <FILE> --out <FILE>` | Re-identify tokenized values using a vault |
 | `dicom <INPUT> --policy <FILE> --out <PATH>` | De-identify DICOM instance metadata, file or directory ([DICOM](#dicom)) |
@@ -153,6 +154,11 @@ Engine options (also accepted by `chain`):
 
 `lint` also accepts `--mode <MODE>` (restrict to lints relevant for one mode),
 `--json`, and `--deny` (exit non-zero on any warning).
+
+`detectors` accepts `--class <precise|moderate|heuristic>` and `--json`. It
+prints the table below straight from the catalog in the code, including which
+detectors support `action: mock`, so the `builtin:` values are discoverable
+without leaving the terminal.
 
 Global: `-h, --help`, and `-v` / `-V` / `--version`.
 
@@ -485,6 +491,22 @@ for a verified identifier.
 
 **Nine of the seventeen are validated** beyond their pattern — the match must
 also pass a checksum or a structural parse before it counts.
+
+`deident detectors` prints this table from the code itself — add `--class` to
+narrow it, or `--json` to consume it:
+
+```
+$ deident detectors --class precise
+DETECTOR     CLASS      MOCK  VALIDATED BY
+email        precise    yes   email syntax
+             email address e.g. user@example.com
+iban         precise    yes   IBAN mod-97
+             IBAN (mod-97 verified, accepts grouped and lowercase forms) e.g. DE89 3704 0044 0532 0130 00
+…
+8 detector(s) listed, 6 validated beyond their pattern.
+Select one with `builtin: <detector>` in a policy's `patterns:`, or a whole
+class at once with `presets:`.
+```
 
 | Detector | Example | Class | Validated by |
 |---|---|---|---|

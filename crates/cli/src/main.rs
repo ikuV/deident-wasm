@@ -7,6 +7,7 @@
 //!   quasi-identifiers with a JSON risk report,
 //! - `chain`: several datasets of one export, with shared token scoping,
 //! - `lint`: report risky-but-valid policy patterns,
+//! - `detectors`: print the built-in entity detector catalog,
 //! - `vault`: inspect/export an encrypted mapping vault,
 //! - `reverse`: re-identify tokenized columns using a vault,
 //! - `dicom`: de-identify DICOM instance metadata (a separate data model, see
@@ -17,7 +18,9 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use deident_core::detect::{Precision, Validator};
 use deident_core::lint::LintLevel;
+use deident_core::mock::MockShape;
 use deident_core::vault::{MappingEntry, derive_vault_key, read_vault};
 use deident_host::wasm::FuelPolicy;
 use deident_host::{AuditLog, AuditedEngine, Engine, NativeEngine, WasmEngine, WasmLimits};
@@ -50,6 +53,9 @@ enum Command {
     Chain(ChainArgs),
     /// Check a policy for risky-but-valid configurations.
     Lint(LintArgs),
+    /// List the built-in entity detectors, their precision class and how each
+    /// match is validated.
+    Detectors(DetectorsArgs),
     /// Inspect or export an encrypted mapping vault.
     Vault(VaultArgs),
     /// Re-identify tokenized columns of a dataset using a vault.
@@ -148,6 +154,16 @@ struct LintArgs {
 }
 
 #[derive(Args)]
+struct DetectorsArgs {
+    /// Restrict the listing to one precision class.
+    #[arg(long, value_enum)]
+    class: Option<CliPrecision>,
+    /// Emit the catalog as JSON.
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args)]
 struct VaultArgs {
     #[command(subcommand)]
     command: VaultCommand,
@@ -211,6 +227,23 @@ impl From<CliMode> for Mode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum CliPrecision {
+    Precise,
+    Moderate,
+    Heuristic,
+}
+
+impl From<CliPrecision> for Precision {
+    fn from(class: CliPrecision) -> Self {
+        match class {
+            CliPrecision::Precise => Precision::Precise,
+            CliPrecision::Moderate => Precision::Moderate,
+            CliPrecision::Heuristic => Precision::Heuristic,
+        }
+    }
+}
+
 #[derive(Args)]
 struct EngineArgs {
     /// Execution engine. `auto` (default) uses the wasm sandbox when a worker
@@ -269,6 +302,7 @@ fn main() -> ExitCode {
         Command::Anonymize(args) => run_job(Mode::Anonymize, args),
         Command::Chain(args) => run_chain(args),
         Command::Lint(args) => run_lint(args),
+        Command::Detectors(args) => run_detectors(args),
         Command::Vault(args) => run_vault(args),
         Command::Reverse(args) => run_reverse(args),
         Command::Dicom(args) => run_dicom(args),
@@ -507,6 +541,82 @@ fn run_lint(args: &LintArgs) -> anyhow::Result<ExitCode> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+// --- detector catalog ----------------------------------------------------
+
+/// One row of the detector catalog, in listing order.
+#[derive(serde::Serialize)]
+struct DetectorInfo {
+    name: &'static str,
+    /// `precise` | `moderate` | `heuristic` — how much a match can be trusted.
+    class: &'static str,
+    description: &'static str,
+    /// The checksum or structural rule every match must pass, if any.
+    validated_by: Option<&'static str>,
+    /// Whether `action: mock` has a format-preserving shape for this detector.
+    /// Without one, only `detect`, `redact` and `token` are available.
+    mockable: bool,
+    example: &'static str,
+}
+
+fn catalog(class: Option<Precision>) -> Vec<DetectorInfo> {
+    deident_core::detect::ALL
+        .iter()
+        .filter(|b| class.is_none_or(|c| b.precision() == c))
+        .map(|b| DetectorInfo {
+            name: b.name(),
+            class: b.precision().label(),
+            description: b.description(),
+            validated_by: match b.validator() {
+                Validator::None => None,
+                validator => Some(validator.label()),
+            },
+            mockable: MockShape::for_builtin(*b).is_some(),
+            example: b.example(),
+        })
+        .collect()
+}
+
+/// Print the catalog the README documents, straight from the code, so `builtin:`
+/// values are discoverable without opening the docs — and cannot drift from
+/// them. Order is the catalog's execution order, which is load-bearing: earlier
+/// detectors consume text later ones would have matched.
+fn run_detectors(args: &DetectorsArgs) -> anyhow::Result<ExitCode> {
+    let rows = catalog(args.class.map(Into::into));
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let width = rows.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    println!("{:<width$}  CLASS      MOCK  VALIDATED BY", "DETECTOR");
+    for row in &rows {
+        println!(
+            "{:<width$}  {:<9}  {:<4}  {}",
+            row.name,
+            row.class,
+            if row.mockable { "yes" } else { "—" },
+            row.validated_by.unwrap_or("— no checksum exists"),
+        );
+        println!("{:<width$}  {} e.g. {}", "", row.description, row.example);
+    }
+
+    let validated = rows.iter().filter(|r| r.validated_by.is_some()).count();
+    println!(
+        "\n{} detector(s) listed, {validated} validated beyond their pattern.",
+        rows.len()
+    );
+    println!("Select one with `builtin: <detector>` in a policy's `patterns:`, or a whole");
+    println!("class at once with `presets:`.");
+    if rows.iter().any(|r| r.class == Precision::Heuristic.label()) {
+        println!();
+        println!("heuristic detectors are stand-ins for named entity recognition, which this");
+        println!("tool does not have: they miss real entities AND flag innocent text. Treat a");
+        println!("match as a candidate for review, not as clean output — prefer `action: detect`.");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Lint before a job. Returns `Some(exit code)` when the job must not run.

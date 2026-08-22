@@ -756,3 +756,60 @@ patterns:
     // The unambiguous column tokens are still reversed.
     assert!(restored.contains("Alice") && restored.contains("Bob"), "{restored}");
 }
+
+/// The catalog listing must stay in sync with the code it prints, so the test
+/// asserts against `detect::ALL` rather than a hand-written expectation.
+#[test]
+fn detectors_lists_the_whole_catalog_in_execution_order() {
+    let output = deident().arg("detectors").assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
+
+    let mut cursor = 0;
+    for builtin in deident_core::detect::ALL {
+        let name = builtin.name();
+        let at = stdout[cursor..]
+            .find(name)
+            .unwrap_or_else(|| panic!("detector '{name}' missing from the listing:\n{stdout}"));
+        // Execution order is load-bearing (an earlier detector consumes text a
+        // later one would match), so the listing must not reorder it.
+        cursor += at + name.len();
+    }
+    assert!(stdout.contains(&format!("{} detector(s) listed", deident_core::detect::ALL.len())));
+    assert!(
+        stdout.contains("prefer `action: detect`"),
+        "a listing including heuristics must carry the caveat"
+    );
+}
+
+#[test]
+fn detectors_filters_by_class_and_emits_json() {
+    deident()
+        .args(["detectors", "--class", "heuristic"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("person_name"))
+        // A class filter must exclude the other classes entirely.
+        .stdout(predicate::str::contains("iban").not())
+        .stdout(predicate::str::contains("0 validated beyond their pattern"));
+
+    let output = deident()
+        .args(["detectors", "--class", "precise", "--json"])
+        .assert()
+        .success();
+    let rows: Vec<serde_json::Value> =
+        serde_json::from_slice(&output.get_output().stdout).unwrap();
+    let precise = deident_core::detect::ALL
+        .iter()
+        .filter(|b| b.precision() == deident_core::Precision::Precise)
+        .count();
+    assert_eq!(rows.len(), precise);
+
+    // `mockable: false` is the difference between a usable `action: mock` and a
+    // policy that fails at run time, so it must be reported accurately.
+    let mac = rows.iter().find(|r| r["name"] == "mac_address").unwrap();
+    assert_eq!(mac["mockable"], serde_json::json!(true));
+    assert_eq!(mac["validated_by"], serde_json::json!("MAC octet parse"));
+    let ifsc = rows.iter().find(|r| r["name"] == "ifsc").unwrap();
+    assert_eq!(ifsc["mockable"], serde_json::json!(false));
+    assert_eq!(ifsc["validated_by"], serde_json::Value::Null);
+}

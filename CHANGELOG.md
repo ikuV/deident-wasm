@@ -10,6 +10,24 @@ more than the crate version for anyone holding existing outputs.
 
 ### Added
 
+- **`deident detectors`** — print the built-in detector catalog: name, precision
+  class, the validator that runs for it, whether `action: mock` has a
+  format-preserving shape for it, and an example match. `--class
+  <precise|moderate|heuristic>` narrows the listing, `--json` makes it
+  consumable.
+
+  The catalog was documented only in the README, so choosing a `builtin:` value
+  meant leaving the terminal, and `mockable` was not written down anywhere at
+  all — the difference between a working `action: mock` and a policy that fails
+  at run time. The command reads `detect::ALL` directly, so it cannot drift from
+  the code the way a table can, and it lists detectors in **execution order**
+  (which is load-bearing: an earlier detector consumes text a later one would
+  have matched). A test asserts the listing against the catalog rather than
+  against a hand-written expectation.
+
+  The heuristic caveat is printed with the listing, not buried in the docs: a
+  `person_name` match is a candidate for review, not clean output.
+
 - **`mac_address` detector**, the seventeenth built-in and the ninth validated
   one. Hardware addresses are stable device identifiers — a MAC in a log line or
   a medical-device export follows one machine, and one user, across every other
