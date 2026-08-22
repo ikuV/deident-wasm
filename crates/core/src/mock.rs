@@ -32,6 +32,12 @@ impl MockShape {
     /// Most detectors have no format-preserving mock: there is no meaningful
     /// "fake but valid" version of a medical term or a person's address, so
     /// those rules must use `redact` or `token` instead.
+    ///
+    /// `bic` is a deliberate omission rather than a gap. The shape is trivial to
+    /// imitate, but unlike email (`example.com`) or MAC (the
+    /// locally-administered range), ISO 9362 reserves no space for codes that
+    /// cannot exist — so every "fake" BIC risks naming a real institution, and
+    /// the mock would be a plausible-looking claim about somebody's bank.
     pub fn for_builtin(builtin: BuiltinPattern) -> Option<Self> {
         Some(match builtin {
             BuiltinPattern::Iban => MockShape::Iban,

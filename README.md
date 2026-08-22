@@ -39,13 +39,13 @@ Anonymize complete: 12 row(s) in, 12 row(s) out (dataset 'patients-demo')
   remove, redact, bucket, truncate dates, keep a prefix. See
   [Policy reference](#policy-reference).
 - **Content patterns** — find identifiers *inside* values (an IBAN in a
-  free-text note) with **17 built-in detectors** (email, IBAN, card, SSN, phone,
-  IP, MAC, URL, API key, passport, plate, IFSC, date of birth, plus heuristic
-  name / address / organization / medical-term matchers) or your own regex, then
-  detect, redact, tokenize or replace them with structurally valid fakes. **Nine
-  of the seventeen are validated** by checksum or structural parse (mod-97, Luhn,
-  real calendar dates, IP parsing), so a loose pattern does not cost you false
-  positives. See [Built-in detectors](#built-in-detectors).
+  free-text note) with **18 built-in detectors** (email, IBAN, BIC, card, SSN,
+  phone, IP, MAC, URL, API key, passport, plate, IFSC, date of birth, plus
+  heuristic name / address / organization / medical-term matchers) or your own
+  regex, then detect, redact, tokenize or replace them with structurally valid
+  fakes. **Ten of the eighteen are validated** by checksum or structural parse
+  (mod-97, Luhn, real calendar dates, IP parsing), so a loose pattern does not
+  cost you false positives. See [Built-in detectors](#built-in-detectors).
 - **Chained datasets** — process several files as one export with shared token
   scoping, so foreign keys still join after pseudonymization. See
   [Chained datasets](#chained-datasets).
@@ -485,11 +485,11 @@ Dropped and tokenized columns are never scanned (nothing left to find).
 
 ### Built-in detectors
 
-Seventeen detectors, grouped by **how much a match can be trusted**. That
+Eighteen detectors, grouped by **how much a match can be trusted**. That
 grouping is the important part: it stops a heuristic guess from being mistaken
 for a verified identifier.
 
-**Nine of the seventeen are validated** beyond their pattern — the match must
+**Ten of the eighteen are validated** beyond their pattern — the match must
 also pass a checksum or a structural parse before it counts.
 
 `deident detectors` prints this table from the code itself — add `--class` to
@@ -502,8 +502,10 @@ email        precise    yes   email syntax
              email address e.g. user@example.com
 iban         precise    yes   IBAN mod-97
              IBAN (mod-97 verified, accepts grouped and lowercase forms) e.g. DE89 3704 0044 0532 0130 00
+bic          precise    —     ISO 9362 structure + country code
+             BIC/SWIFT code, 8 or 11 characters (ISO 9362) e.g. TESTDEFFXXX
 …
-8 detector(s) listed, 6 validated beyond their pattern.
+9 detector(s) listed, 7 validated beyond their pattern.
 Select one with `builtin: <detector>` in a policy's `patterns:`, or a whole
 class at once with `presets:`.
 ```
@@ -512,6 +514,7 @@ class at once with `presets:`.
 |---|---|---|---|
 | `email` | `user@example.com` | precise | ✅ RFC 5321 structure: single `@`, length limits, dotted domain, alphabetic TLD |
 | `iban` | `DE89 3704 0044 0532 0130 00` | precise | ✅ mod-97 (ISO 7064) check digits |
+| `bic` | `TESTDEFFXXX` | precise | ✅ ISO 9362: 8/11 chars, real ISO 3166 country code, location-code rules |
 | `credit_card` | `4111 1111 1111 1111` | precise | ✅ Luhn **plus** card length (13–19) and issuer prefix (2–6) |
 | `ip_address` | `192.168.1.1`, `2001:db8::1` | precise | ✅ parsed as a real address (`std::net::IpAddr`) |
 | `mac_address` | `00:1A:2B:3C:4D:5E`, `001a.2b3c.4d5e` | precise | ✅ six hex octets, rejects the `00:…`/`ff:…` wildcards |
@@ -587,7 +590,7 @@ their final characters, which is checkable but vendor-specific.
 
 #### Presets
 
-Rather than listing seventeen rules, enable a whole class:
+Rather than listing eighteen rules, enable a whole class:
 
 ```yaml
 presets:

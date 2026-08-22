@@ -81,6 +81,8 @@ pub enum Validator {
     /// Six hex octets, rejecting the all-identical placeholders (`00:00:…`,
     /// `ff:ff:…`) that are wildcards rather than device identifiers.
     MacAddress,
+    /// ISO 9362 structure: a real country code and the two location-code rules.
+    BicStructure,
 }
 
 impl Validator {
@@ -98,6 +100,7 @@ impl Validator {
             Validator::UrlSyntax => url_syntax_valid(matched),
             Validator::PhoneE164 => phone_e164_valid(matched),
             Validator::MacAddress => mac_address_valid(matched),
+            Validator::BicStructure => bic_valid(matched),
         }
     }
 
@@ -115,6 +118,7 @@ impl Validator {
             Validator::UrlSyntax => "URL syntax",
             Validator::PhoneE164 => "E.164 limits",
             Validator::MacAddress => "MAC octet parse",
+            Validator::BicStructure => "ISO 9362 structure + country code",
         }
     }
 }
@@ -159,6 +163,52 @@ fn card_brand_valid(matched: &str) -> bool {
         return false;
     }
     crate::mock::luhn_valid(matched)
+}
+
+/// ISO 3166-1 alpha-2 codes, plus `XK` — Kosovo is only user-assigned in ISO
+/// but banks there do issue BICs and IBANs under it, so excluding it would drop
+/// real identifiers.
+const COUNTRY_CODES: &[&str] = &[
+    "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ",
+    "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS",
+    "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN",
+    "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE",
+    "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF",
+    "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM",
+    "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE", "JM",
+    "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC",
+    "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
+    "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA",
+    "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG",
+    "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW",
+    "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS",
+    "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO",
+    "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI",
+    "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW",
+];
+
+/// Whether a matched string is a well-formed BIC (ISO 9362).
+///
+/// A BIC carries no check digit, so this is the structure the standard fixes:
+/// 8 or 11 characters, a real ISO 3166-1 country code in positions 5–6, and the
+/// two location-code rules — the first character is never `0` or `1` (reserved
+/// to distinguish BICs from other code types) and the second is never `O`
+/// (excluded because it is indistinguishable from zero in print).
+///
+/// The country code is what makes the detector precise rather than "any eight
+/// capitals": `ABCDEFGH` has the shape but `EF` is not a country. It does not
+/// verify that the institution exists — no offline check can — so a
+/// well-formed code for a bank that never existed is still reported, which is
+/// the right direction for a tool looking for identifiers.
+fn bic_valid(matched: &str) -> bool {
+    if matched.len() != 8 && matched.len() != 11 {
+        return false;
+    }
+    if !COUNTRY_CODES.contains(&&matched[4..6]) {
+        return false;
+    }
+    let location = matched.as_bytes();
+    location[6] != b'0' && location[6] != b'1' && location[7] != b'O'
 }
 
 /// Days in a month, honouring the Gregorian leap rule.
@@ -322,6 +372,7 @@ pub enum BuiltinPattern {
     // --- precise (distinctive syntax, mostly checksum-verified) ---------
     Email,
     Iban,
+    Bic,
     CreditCard,
     IpAddress,
     MacAddress,
@@ -363,6 +414,7 @@ pub const ALL: &[BuiltinPattern] = &[
     // Precise: distinctive syntax, mostly checksum-verified.
     BuiltinPattern::Email,
     BuiltinPattern::Iban,
+    BuiltinPattern::Bic,
     BuiltinPattern::CreditCard,
     BuiltinPattern::IpAddress,
     BuiltinPattern::MacAddress,
@@ -388,6 +440,7 @@ impl BuiltinPattern {
         match self {
             BuiltinPattern::Email => "email",
             BuiltinPattern::Iban => "iban",
+            BuiltinPattern::Bic => "bic",
             BuiltinPattern::CreditCard => "credit_card",
             BuiltinPattern::IpAddress => "ip_address",
             BuiltinPattern::MacAddress => "mac_address",
@@ -410,6 +463,7 @@ impl BuiltinPattern {
         match self {
             BuiltinPattern::Email
             | BuiltinPattern::Iban
+            | BuiltinPattern::Bic
             | BuiltinPattern::CreditCard
             | BuiltinPattern::IpAddress
             | BuiltinPattern::MacAddress
@@ -433,6 +487,7 @@ impl BuiltinPattern {
         match self {
             BuiltinPattern::CreditCard => Validator::CardBrand,
             BuiltinPattern::Iban => Validator::IbanMod97,
+            BuiltinPattern::Bic => Validator::BicStructure,
             BuiltinPattern::Ssn => Validator::SsnUs,
             BuiltinPattern::IpAddress => Validator::IpAddress,
             BuiltinPattern::MacAddress => Validator::MacAddress,
@@ -460,6 +515,7 @@ impl BuiltinPattern {
         match self {
             BuiltinPattern::Email => "email address",
             BuiltinPattern::Iban => "IBAN (mod-97 verified, accepts grouped and lowercase forms)",
+            BuiltinPattern::Bic => "BIC/SWIFT code, 8 or 11 characters (ISO 9362)",
             BuiltinPattern::CreditCard => "payment card number (Luhn verified)",
             BuiltinPattern::IpAddress => "IPv4 or IPv6 address",
             BuiltinPattern::MacAddress => {
@@ -510,6 +566,12 @@ impl BuiltinPattern {
             BuiltinPattern::Iban => {
                 r"(?i)\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\b|\b[A-Z]{2}[0-9]{2}(?: [A-Z0-9]{4}){2,6}(?: [A-Z0-9]{1,4})?\b"
             }
+            // Institution (4 letters), country (2 letters), location (2), and an
+            // optional 3-character branch. Uppercase only, unlike `iban`: a BIC
+            // has no checksum, so the country-code check is the only filter, and
+            // matching lowercase would put every eight-letter word in prose in
+            // front of it. SWIFT specifies uppercase, so this costs little.
+            BuiltinPattern::Bic => r"\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b",
             // 13–19 digits with optional space/dash grouping (covers Amex 4-6-5);
             // Luhn-verified.
             BuiltinPattern::CreditCard => r"\b\d(?:[ -]?\d){12,18}\b",
@@ -626,6 +688,10 @@ impl BuiltinPattern {
         match self {
             BuiltinPattern::Email => "user@example.com",
             BuiltinPattern::Iban => "DE89 3704 0044 0532 0130 00",
+            // `TEST` is the institution code SWIFT test environments use, and
+            // `XXX` is the standard primary-office branch: well-formed without
+            // naming a real bank.
+            BuiltinPattern::Bic => "TESTDEFFXXX",
             BuiltinPattern::CreditCard => "4532-1234-5678-9014",
             BuiltinPattern::IpAddress => "192.168.1.1",
             BuiltinPattern::MacAddress => "00:1A:2B:3C:4D:5E",
@@ -682,7 +748,7 @@ mod tests {
         for builtin in ALL {
             assert!(names.insert(builtin.name()), "duplicate name {}", builtin.name());
         }
-        assert_eq!(names.len(), 17, "all seventeen detectors present");
+        assert_eq!(names.len(), 18, "all eighteen detectors present");
     }
 
     fn matches(builtin: BuiltinPattern, text: &str) -> Vec<String> {
@@ -730,6 +796,42 @@ mod tests {
                 found[0]
             );
         }
+    }
+
+    #[test]
+    fn bic_accepts_both_lengths_and_needs_a_real_country_code() {
+        for form in ["TESTDEFFXXX", "TESTDEFF", "ABNANL2A", "MIDLGB22XXX"] {
+            assert!(!matches(BuiltinPattern::Bic, form).is_empty(), "missed {form}");
+        }
+        // Right shape, no such country — the check that makes this precise
+        // rather than "any eight capitals".
+        assert!(matches(BuiltinPattern::Bic, "ABCDEFGH").is_empty());
+        // Nine and ten characters are not BIC lengths, and the word boundaries
+        // must stop the pattern claiming an 8-character prefix of a longer token.
+        for wrong_length in ["TESTDEFFX", "TESTDEFFXX", "TESTDEFFXXXX"] {
+            assert!(
+                matches(BuiltinPattern::Bic, wrong_length).is_empty(),
+                "accepted {wrong_length}"
+            );
+        }
+        // Location-code rules from ISO 9362.
+        assert!(matches(BuiltinPattern::Bic, "TESTDE1F").is_empty(), "location may not start 0/1");
+        assert!(matches(BuiltinPattern::Bic, "TESTDEFO").is_empty(), "location may not end in O");
+    }
+
+    /// A BIC and an IBAN sit next to each other in every payment export, and
+    /// both start with letters, so neither pattern may claim the other's value.
+    #[test]
+    fn bic_and_iban_do_not_overlap() {
+        let text = "pay DE89370400440532013000 at TESTDEFFXXX today";
+        assert_eq!(matches(BuiltinPattern::Bic, text), vec!["TESTDEFFXXX".to_string()]);
+        assert_eq!(
+            matches(BuiltinPattern::Iban, text),
+            vec!["DE89370400440532013000".to_string()]
+        );
+        // An IFSC code shares the leading-four-letters shape but has a digit
+        // where a BIC has its country code.
+        assert!(matches(BuiltinPattern::Bic, "HDFC0001234").is_empty());
     }
 
     #[test]
@@ -1055,6 +1157,38 @@ mod validator_tests {
         assert!(v.accepts("02:00:00:00:00:01"));
     }
 
+    #[test]
+    fn bic_validation_checks_the_country_and_location_codes() {
+        let v = Validator::BicStructure;
+        for good in ["TESTDEFFXXX", "ABNANL2A", "TESTXKFF"] {
+            assert!(v.accepts(good), "rejected well-formed BIC {good}");
+        }
+        for bad in [
+            "ABCDEFGH",    // EF is not a country
+            "TESTDE0F",    // location code may not start with 0
+            "TESTDE1F",    // ... nor 1
+            "TESTDEFO",    // ... nor end in O, unreadable next to zero
+            "TESTDEFFXX",  // not a BIC length
+        ] {
+            assert!(!v.accepts(bad), "accepted {bad}");
+        }
+    }
+
+    #[test]
+    fn country_table_is_sorted_and_free_of_duplicates() {
+        // Sorted is not required by `contains`, but an unsorted or duplicated
+        // table is the sign of a careless edit, and this is the only thing
+        // standing between the BIC detector and eight-capital false positives.
+        let mut sorted = COUNTRY_CODES.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.as_slice(), COUNTRY_CODES);
+        assert!(COUNTRY_CODES.iter().all(|c| c.len() == 2));
+        for expected in ["DE", "GB", "US", "IN", "XK"] {
+            assert!(COUNTRY_CODES.contains(&expected), "missing {expected}");
+        }
+    }
+
     /// The catalog must stay honest: a detector claims verification only when a
     /// validator actually runs for it.
     #[test]
@@ -1069,6 +1203,7 @@ mod validator_tests {
             vec![
                 "email",
                 "iban",
+                "bic",
                 "credit_card",
                 "ip_address",
                 "mac_address",
@@ -1077,7 +1212,7 @@ mod validator_tests {
                 "date_of_birth",
                 "phone",
             ],
-            "nine of seventeen detectors are validated; the rest have no checksum \
+            "ten of eighteen detectors are validated; the rest have no checksum \
              or structural rule and must not claim one"
         );
     }

@@ -5,7 +5,7 @@
 # The three classes encode how much a match can be trusted:
 #
 #   precise    Distinctive syntax, mostly checksum-verified — email, IBAN
-#              (mod-97), payment card (Luhn), IP, MAC, URL, API key, IFSC.
+#              (mod-97), BIC, payment card (Luhn), IP, MAC, URL, API key, IFSC.
 #              Safe to redact automatically.
 #   moderate   A recognisable shape that innocent data also has — phone, SSN,
 #              date of birth, passport, licence plate. Expect false positives.

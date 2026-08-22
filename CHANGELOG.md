@@ -10,6 +10,30 @@ more than the crate version for anyone holding existing outputs.
 
 ### Added
 
+- **`bic` detector** (ISO 9362 / SWIFT), the eighteenth built-in and the tenth
+  validated one. A BIC sits next to an IBAN in every payment export and names
+  the account holder's bank, which is one of the strongest linking attributes a
+  "pseudonymized" financial dataset can leak; the `iban` detector walked past it.
+
+  Validation is structural, because a BIC carries no check digit: 8 or 11
+  characters, a **real ISO 3166-1 country code** in positions 5–6, and the two
+  location-code rules from the standard (never `0`/`1` first — reserved to
+  distinguish BICs from other code types — and never `O` second, since it is
+  indistinguishable from zero in print). The country-code table is what makes
+  the detector precise rather than "any eight capitals": `ABCDEFGH` has the
+  shape, but `EF` is not a country. `XK` is included even though ISO only
+  user-assigns it, because Kosovan banks issue BICs under it.
+
+  Unlike `iban`, the pattern is **uppercase-only**. With no checksum the country
+  code is the sole filter, and matching lowercase would put every eight-letter
+  word in a free-text note ahead of it; SWIFT specifies uppercase, so the
+  recall cost is small and the false-positive saving is not.
+
+  **No `action: mock`**, deliberately. The shape is trivial to imitate, but
+  unlike email (`example.com`) or MAC (the locally-administered range), ISO 9362
+  reserves no space for codes that cannot exist — so every "fake" BIC risks
+  naming a real institution. `redact` and `token` are the honest options.
+
 - **`deident detectors`** — print the built-in detector catalog: name, precision
   class, the validator that runs for it, whether `action: mock` has a
   format-preserving shape for it, and an example match. `--class
